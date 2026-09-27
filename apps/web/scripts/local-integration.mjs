@@ -41,7 +41,11 @@ try {
   if (!assetHref) throw new Error('Incident primary asset link was not rendered.');
   await page.goto(`http://localhost:3000${assetHref}/maintenance`);
   await page.getByText('Inspect local simulator asset').first().waitFor();
-  process.stdout.write('Browser integration passed: Keycloak login, inventory, site hierarchy, telemetry, incidents and maintenance.\n');
+  await page.goto(`http://localhost:3000${assetHref}/topology`);
+  await page.getByText('Direct relationships').first().waitFor();
+  await page.getByRole('button', { name: 'Table', exact: true }).click();
+  await page.getByText('Depends on').first().waitFor();
+  process.stdout.write('Browser integration passed: Keycloak login, inventory, site hierarchy, telemetry, incidents, maintenance and topology.\n');
 } finally {
   await browser.close();
 }

@@ -84,6 +84,7 @@ frontend.MapFrontendEndpoints();
 frontend.MapTelemetryEndpoints();
 frontend.MapIncidentFrontendEndpoints();
 frontend.MapMaintenanceFrontendEndpoints();
+frontend.MapTopologyEndpoints();
 api.MapAssetEndpoints();
 api.MapCommandEndpoints();
 api.MapObservationEndpoints();

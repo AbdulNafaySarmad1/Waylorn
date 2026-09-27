@@ -116,6 +116,19 @@ $industrialConfig = Send-Json 'POST' '/api/v1/commands' $admin @{
 } @{ 'Idempotency-Key' = "smoke-$([Guid]::NewGuid())" }
 if ($industrialConfig.StatusCode -ne 403) { throw "Industrial configuration request returned $($industrialConfig.StatusCode)." }
 
+$dependency = Send-Json 'POST' '/api/v1/relationships' $admin @{
+    sourceAssetId = $computeId; targetAssetId = $assetId; kind = 'DependsOn'
+}
+if ($dependency.StatusCode -ne 201) { throw "Dependency creation returned $($dependency.StatusCode)." }
+$graph = Send-Json 'GET' "/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/topology/neighborhood?focus=$assetId&depth=1&nodeLimit=10" $admin $null
+if ($graph.StatusCode -ne 200 -or -not @(($graph.Content | ConvertFrom-Json).nodes | Where-Object { $_.id -eq $computeId }).Count) {
+    throw 'Topology neighborhood did not include the compute dependency.'
+}
+$impact = Send-Json 'GET' "/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/topology/impact?assetId=$assetId&direction=downstream" $admin $null
+if ($impact.StatusCode -ne 200 -or -not @(($impact.Content | ConvertFrom-Json).affected | Where-Object { $_.node.id -eq $computeId }).Count) {
+    throw 'Dependency impact did not include the compute asset.'
+}
+
 $auditPage = Send-Json 'GET' "/api/v1/audit?siteId=$site&limit=1" $admin $null
 if ($auditPage.StatusCode -ne 200) { throw "Audit query returned $($auditPage.StatusCode): $($auditPage.Content)" }
 $firstAudit = $auditPage.Content | ConvertFrom-Json
@@ -150,4 +163,4 @@ if ($maintenance.StatusCode -ne 200 -or ($maintenance.Content | ConvertFrom-Json
     throw 'Maintenance frontend list failed.'
 }
 
-Write-Output 'Live Keycloak + PostgreSQL smoke passed: readiness, JWT, inventory, approval, audit, incident and maintenance workflows.'
+Write-Output 'Live Keycloak + PostgreSQL smoke passed: readiness, JWT, inventory, approval, audit, incident, maintenance and topology.'

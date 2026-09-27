@@ -43,6 +43,8 @@ Set `Cache:Endpoint` to enable Valkey for 30-second asset-detail reads. Authoriz
 | `POST /api/v1/commands` | Operator/Administrator records an AMBER request; requires `Idempotency-Key`, change ticket, and window. RED requests, including industrial/network/security configuration changes, are denied and audited. No dispatch. |
 | `GET /api/v1/commands/{id}` | Scoped command state. |
 | `POST /api/v1/commands/{id}/approve` | Separate Approver, current window, ticket; RED records cannot be approved. Writes audit. No dispatch. |
+| `GET /api/v0/orgs/{orgId}/topology/neighborhood` | Site-scoped, bounded relationship traversal for the web graph. |
+| `GET /api/v0/orgs/{orgId}/topology/impact` | Site-scoped upstream/downstream traversal over explicit dependency relations. |
 | `GET /api/v1/audit` | Administrator-only, site-scoped audit rows with optional target filter and stable cursor pagination (up to 100). |
 | `GET /api/v1/audit/{id}` | Administrator-only record lookup with tenant/site enforcement. |
 | `POST /api/v1/observations` | SiteAgent workload only; bounded, versioned read-only Modbus observation batch with idempotent retry. Raw ingest is disabled unless explicitly enabled at a site-local deployment. |

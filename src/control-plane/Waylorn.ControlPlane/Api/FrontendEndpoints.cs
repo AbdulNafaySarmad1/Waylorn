@@ -191,7 +191,7 @@ public static class FrontendEndpoints
             zone is null ? null : new(zone.Id, zone.Name)),
         "unknown", new("unknown"), new("unknown"), "unverified");
 
-    private static string KindName(AssetKind kind) => kind switch
+    internal static string KindName(AssetKind kind) => kind switch
     {
         AssetKind.Industrial => "IndustrialAsset", AssetKind.Compute => "ComputeAsset",
         AssetKind.Network => "NetworkAsset", AssetKind.Cloud => "CloudResource",

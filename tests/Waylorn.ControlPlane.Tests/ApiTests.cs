@@ -181,6 +181,21 @@ public class ApiTests
         var listed = await client.GetAsync($"/api/v1/assets/{first}/relationships");
         Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
         Assert.Single((await listed.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray());
+        var dependency = await client.PostAsJsonAsync("/api/v1/relationships",
+            new { sourceAssetId = second, targetAssetId = first, kind = "DependsOn" });
+        Assert.Equal(HttpStatusCode.Created, dependency.StatusCode);
+        var dependencyId = (await dependency.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var neighborhood = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/v0/orgs/{org}/topology/neighborhood?focus={first}&depth=1&nodeLimit=10");
+        Assert.Equal(first, neighborhood.GetProperty("focusId").GetGuid());
+        Assert.Equal(2, neighborhood.GetProperty("nodes").GetArrayLength());
+        Assert.Equal(2, neighborhood.GetProperty("edges").GetArrayLength());
+        var impact = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/v0/orgs/{org}/topology/impact?assetId={first}&direction=downstream");
+        Assert.Equal(second, impact.GetProperty("affected")[0].GetProperty("node").GetProperty("id").GetGuid());
+        Assert.Equal(dependencyId.ToString(), impact.GetProperty("affected")[0].GetProperty("path")[0].GetString());
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync(
+            $"/api/v0/orgs/{org}/topology/neighborhood?focus={first}&depth=5")).StatusCode);
 
         var start = DateTimeOffset.UtcNow.AddMinutes(-1);
         var end = DateTimeOffset.UtcNow.AddMinutes(5);
@@ -218,6 +233,12 @@ public class ApiTests
         SetIdentity(client, Guid.NewGuid(), site, "Administrator", "outsider");
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/assets/{first}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v0/orgs/{org}/assets/{first}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(
+            $"/api/v0/orgs/{org}/topology/neighborhood?focus={first}")).StatusCode);
+        SetIdentity(client, org, Guid.NewGuid(), "Administrator", "other-site-admin");
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(
+            $"/api/v0/orgs/{org}/topology/impact?assetId={first}&direction=downstream")).StatusCode);
+        SetIdentity(client, Guid.NewGuid(), site, "Administrator", "outsider");
 
         using var checkScope = factory.Services.CreateScope();
         var db = checkScope.ServiceProvider.GetRequiredService<WaylornDbContext>();
@@ -225,9 +246,9 @@ public class ApiTests
         Assert.Equal(0, await db.Commands.CountAsync());
         var options = new DbContextOptionsBuilder<WaylornDbContext>().UseSqlite(sqlite).Options;
         await using var ownerDb = new WaylornDbContext(options, new TenantScope(org));
-        Assert.Equal(20, await ownerDb.Audit.CountAsync());
+        Assert.Equal(21, await ownerDb.Audit.CountAsync());
         Assert.Single(await ownerDb.Commands.ToListAsync());
-        Assert.Equal(20, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Audit));
+        Assert.Equal(21, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Audit));
         Assert.Equal(2, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Control));
         Assert.Equal(4, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Operations));
         var eventPayload = JsonDocument.Parse((await ownerDb.Outbox.FirstAsync()).Payload);
