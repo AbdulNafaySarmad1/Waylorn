@@ -78,6 +78,10 @@ $webAsset = Send-Json 'GET' "/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/asset
 if ($webAsset.StatusCode -ne 200 -or ($webAsset.Content | ConvertFrom-Json).lifecycle -ne 'unknown') {
     throw 'Frontend asset-detail contract failed.'
 }
+$actions = Send-Json 'GET' "/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/assets/$assetId/actions" $admin $null
+if ($actions.StatusCode -ne 200 -or ($actions.Content | ConvertFrom-Json).items.Count -ne 0) {
+    throw 'Asset action availability must be empty until dispatch exists.'
+}
 $deniedWebAssets = Send-Json 'GET' "/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/assets?siteId=$site" $approver $null
 if ($deniedWebAssets.StatusCode -ne 403) { throw 'Frontend asset-list role enforcement failed.' }
 foreach ($attempt in 1..2) {

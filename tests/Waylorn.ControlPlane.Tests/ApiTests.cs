@@ -167,6 +167,8 @@ public class ApiTests
         var webDetail = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/assets/{first}");
         Assert.Equal(first, webDetail.GetProperty("id").GetGuid());
         Assert.False(webDetail.TryGetProperty("extension", out _));
+        var actions = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/assets/{first}/actions");
+        Assert.Empty(actions.GetProperty("items").EnumerateArray());
         var disposable = await CreateAsset(client, site, "Temporary");
         var updated = await client.PutAsJsonAsync($"/api/v1/assets/{first}",
             new { version = 1, siteId = site, kind = "Industrial", name = "PLC-1-updated" });
