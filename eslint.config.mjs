@@ -70,6 +70,10 @@ export default tseslint.config(
     },
   },
   {
+    files: ['**/test/**/*.{ts,tsx}', '**/e2e/**/*.ts'],
+    rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
+  },
+  {
     // Development fixtures: terse test-data code; correctness rules stay on.
     files: ['tools/dev-fixtures/**/*.ts'],
     rules: {

@@ -24,6 +24,24 @@ function contrast(a: string, b: string): number {
   return (l1 + 0.05) / (l2 + 0.05);
 }
 
+describe('environment badges', () => {
+  it.each([
+    ['production', '#b3261e'],
+    ['lab light', '#4a3aa7'],
+    ['lab dark', '#5b4ec2'],
+    ['development light', '#4a5159'],
+    ['development dark', '#555d66'],
+  ])('%s badge meets 4.5:1 with white text', (_n, bg) => {
+    expect(contrast('#ffffff', bg)).toBeGreaterThanOrEqual(4.5);
+  });
+  it('dark theme badge colours are the tested ones', () => {
+    const b = block(":root[data-theme='dark']");
+    expect(b).toContain('--env-production: #b3261e;');
+    expect(b).toContain('--env-lab: #5b4ec2;');
+    expect(b).toContain('--env-development: #555d66;');
+  });
+});
+
 const textKeys: (keyof ColorTokens)[] = [
   'textPrimary', 'textSecondary', 'textMuted', 'statusOk', 'statusWarning', 'statusFault',
   'statusUnknown', 'statusInfo', 'safetyGreen', 'safetyAmber', 'safetyRed',

@@ -32,7 +32,8 @@ export function PreflightReview({ preflight, state, onTypedConfirmation, onStepU
   const cls = effectiveSafetyClass(preflight.safetyClass);
   const heading = useRef<HTMLHeadingElement>(null);
   const steps = requiredCeremony(preflight);
-  const blockers = confirmBlockers(preflight, state);
+  // A denial is already explained above with the backend's reasons.
+  const blockers = confirmBlockers(preflight, state).filter((b) => b.code !== 'denied');
   const t = preflight.target;
 
   useEffect(() => {

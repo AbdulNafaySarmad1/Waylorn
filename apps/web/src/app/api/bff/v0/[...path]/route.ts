@@ -75,9 +75,29 @@ async function forward(request: NextRequest, { params }: Params): Promise<Respon
     if (v !== null) headers.set(name, v);
   }
   if (!headers.has('x-correlation-id')) headers.set('x-correlation-id', correlationId);
-  if (headers.get('content-type')?.startsWith('text/event-stream')) headers.set('x-accel-buffering', 'no');
-  // Body is streamed through unchanged (SSE included).
-  return new Response(upstream.body, { status: upstream.status, headers });
+  const sse = headers.get('content-type')?.startsWith('text/event-stream') ?? false;
+  if (sse) headers.set('x-accel-buffering', 'no');
+  // Body is streamed through unchanged. An SSE upstream that dies ends the stream cleanly so
+  // the browser's EventSource sees the disconnect and reconnects.
+  return new Response(sse && upstream.body ? endOnError(upstream.body) : upstream.body, { status: upstream.status, headers });
+}
+
+function endOnError(source: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+  const reader = source.getReader();
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) controller.close();
+        else controller.enqueue(value);
+      } catch {
+        controller.close();
+      }
+    },
+    cancel(reason) {
+      reader.cancel(reason).catch(() => undefined);
+    },
+  });
 }
 
 export const GET = forward;

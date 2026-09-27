@@ -91,7 +91,7 @@ export function ContextBar({
       <details className={styles.menu} ref={orgMenu}>
         <summary aria-label={`Organization: ${session.orgName}. Change organization`}>
           <span className="visually-hidden">Organization:</span>
-          <strong>{session.orgName}</strong>
+          <strong className={styles.truncate}>{session.orgName}</strong>
         </summary>
         <div className={styles.menuPanel}>
           <div className={styles.menuSection}>Organizations you can access</div>
@@ -108,8 +108,13 @@ export function ContextBar({
         className={styles.searchButton}
         onClick={() => window.dispatchEvent(new Event('waylorn:palette'))}
         aria-keyshortcuts="Control+K Meta+K"
+        aria-label="Go to asset, site or area"
       >
-        <span className="searchLabel">Go to asset, site or area…</span>
+        <span className={styles.searchLabel}>Go to asset, site or area…</span>
+        <svg className={styles.searchIcon} width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+          <circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          <path d="m9.5 9.5 3.5 3.5" stroke="currentColor" strokeWidth="1.6" />
+        </svg>
         <kbd>Ctrl K</kbd>
       </button>
       <span className={styles.spacer} />
@@ -119,7 +124,7 @@ export function ContextBar({
       <details className={styles.menu} ref={userMenu}>
         <summary>
           <span className="visually-hidden">Signed in as</span>
-          {session.displayName}
+          <span className={styles.truncate}>{session.displayName}</span>
         </summary>
         <div className={`${styles.menuPanel} ${styles.menuPanelRight}`}>
           <div className={styles.menuSection}>

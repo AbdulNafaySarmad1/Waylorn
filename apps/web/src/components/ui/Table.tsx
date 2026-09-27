@@ -8,7 +8,7 @@ export const tableStyles = styles;
 export function DataTable({ caption, children, label }: { caption?: ReactNode; children: ReactNode; label?: string }) {
   return (
     <div className={styles.wrap} role="region" aria-label={label} tabIndex={0}>
-      <table className={styles.table}>
+      <table className={styles.table} aria-label={label}>
         {caption ? <caption>{caption}</caption> : null}
         {children}
       </table>

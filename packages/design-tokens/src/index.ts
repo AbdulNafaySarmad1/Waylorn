@@ -63,5 +63,5 @@ export const dark: ColorTokens = {
   safetyGreen: '#8fbfa2',
   safetyAmber: '#f2c25c',
   safetyRed: '#ff8a80',
-  envProduction: '#e0564c',
+  envProduction: '#b3261e',
 };

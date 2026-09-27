@@ -23,8 +23,8 @@
   gap: var(--space-5);
   height: var(--context-bar-height);
   padding: 0 var(--space-5);
-  background: var(--surface-inverse);
-  color: var(--text-inverse);
+  background: var(--bar-bg);
+  color: var(--bar-text);
   font-size: var(--text-sm);
 }
 .bar a {
@@ -40,7 +40,7 @@
   width: 1px;
   align-self: stretch;
   margin: var(--space-3) 0;
-  background: color-mix(in srgb, var(--text-inverse) 30%, transparent);
+  background: color-mix(in srgb, var(--bar-text) 30%, transparent);
 }
 .spacer {
   flex: 1;
@@ -68,7 +68,7 @@
   display: none;
 }
 .menu > summary:hover {
-  background: color-mix(in srgb, var(--text-inverse) 12%, transparent);
+  background: color-mix(in srgb, var(--bar-text) 12%, transparent);
 }
 .menu > summary::after {
   content: '▾';
@@ -126,9 +126,9 @@
   min-width: 220px;
   min-height: 26px;
   padding: 0 var(--space-4);
-  background: color-mix(in srgb, var(--text-inverse) 10%, transparent);
+  background: color-mix(in srgb, var(--bar-text) 10%, transparent);
   color: inherit;
-  border: var(--border-width) solid color-mix(in srgb, var(--text-inverse) 30%, transparent);
+  border: var(--border-width) solid color-mix(in srgb, var(--bar-text) 30%, transparent);
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
@@ -184,7 +184,7 @@
 }
 .navPlanned {
   font-size: var(--text-xs);
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 .main {
   grid-area: main;
@@ -214,7 +214,49 @@
   .searchButton {
     min-width: 0;
   }
-  .searchButton .searchLabel {
+  .searchLabel {
     display: none;
   }
+  .searchIcon {
+    display: inline;
+  }
+}
+
+.truncate {
+  display: inline-block;
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+@media (max-width: 640px) {
+  .bar {
+    gap: var(--space-3);
+    padding: 0 var(--space-4);
+  }
+  .brand,
+  .divider,
+  .searchButton kbd {
+    display: none;
+  }
+  .truncate {
+    max-width: 30vw;
+  }
+  .menu > summary {
+    padding: var(--space-2);
+  }
+  .menuPanel {
+    position: fixed;
+    top: calc(var(--context-bar-height) + var(--space-2));
+    left: var(--space-4);
+    right: var(--space-4);
+    min-width: 0;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+}
+
+.searchIcon {
+  display: none;
 }

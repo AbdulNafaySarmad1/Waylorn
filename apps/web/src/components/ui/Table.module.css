@@ -1,4 +1,6 @@
 .wrap {
+  /* Positioned so visually-hidden (absolute) text inside cells stays within the scroller. */
+  position: relative;
   overflow-x: auto;
   max-width: 100%;
 }

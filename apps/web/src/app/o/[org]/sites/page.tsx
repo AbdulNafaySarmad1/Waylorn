@@ -32,23 +32,27 @@ async function HierarchyLevel({ ctx, parentId, slug }: { ctx: OrgContext; parent
             <strong>{n.name}</strong>
             {n.code ? <span className="mono muted"> {n.code}</span> : null}
             {n.assetCount !== undefined ? <span className="muted"> · {n.assetCount.toLocaleString('en-GB')} assets</span> : null}
-            {filter ? (
-              <>
-                {' · '}
-                <Link href={`${orgPath(slug, 'assets')}${filter}`}>View assets</Link>
-              </>
-            ) : null}
           </>
         );
+        // Links live outside <summary>: interactive content must not be nested.
+        const assetsLink = filter ? (
+          <Link href={`${orgPath(slug, 'assets')}${filter}`} style={{ marginLeft: 8 }}>
+            View assets<span className="visually-hidden"> at {n.name}</span>
+          </Link>
+        ) : null;
         return (
           <li key={n.id} style={{ padding: '2px 0' }}>
             {n.childCount > 0 ? (
               <details open={n.level === 'region'}>
                 <summary style={{ cursor: 'pointer', padding: '4px 0' }}>{label}</summary>
+                {assetsLink}
                 <HierarchyLevel ctx={ctx} parentId={n.id} slug={slug} />
               </details>
             ) : (
-              <div style={{ padding: '4px 0 4px 16px' }}>{label}</div>
+              <div style={{ padding: '4px 0 4px 16px' }}>
+                {label}
+                {assetsLink}
+              </div>
             )}
           </li>
         );

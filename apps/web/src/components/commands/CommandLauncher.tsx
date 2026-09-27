@@ -175,19 +175,24 @@ export function CommandLauncher({ asset }: { asset: AssetDetail }) {
     if (response.status === 409) setStep('describe');
   };
 
-  // Track the outcome until the backend reports a reconciled terminal state.
+  // Track the outcome until the backend reports a reconciled terminal state or the wait ends.
+  const recordId = record?.id;
+  const terminal = record ? COMMAND_STATE[record.state].terminal : true;
   useEffect(() => {
-    if (step !== 'outcome' || !record || COMMAND_STATE[record.state].terminal) return;
-    if (Date.now() - submittedAt > OUTCOME_WAIT_MS) return;
-    const t = setTimeout(() => {
+    if (step !== 'outcome' || !recordId || terminal) return;
+    const t = setInterval(() => {
+      if (Date.now() - submittedAt > OUTCOME_WAIT_MS) {
+        clearInterval(t);
+        return;
+      }
       void bff()
-        .GET('/orgs/{orgId}/commands/{commandId}', { params: { path: { orgId: session.orgId, commandId: record.id } } })
+        .GET('/orgs/{orgId}/commands/{commandId}', { params: { path: { orgId: session.orgId, commandId: recordId } } })
         .then(({ data }) => {
           if (data) setRecord(data);
         });
     }, OUTCOME_POLL_MS);
-    return () => clearTimeout(t);
-  }, [now, record, session.orgId, step, submittedAt]);
+    return () => clearInterval(t);
+  }, [recordId, session.orgId, step, submittedAt, terminal]);
 
   const confirmationState = { nowMs: now, typedConfirmation: typed, authTimeMs: session.authTime, acr: session.acr };
   const blockers = preflight ? confirmBlockers(preflight, confirmationState) : [];

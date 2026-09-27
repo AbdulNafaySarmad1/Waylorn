@@ -47,6 +47,9 @@
   --surface-2: #f3f4f5;   /* table header, secondary panels */
   --surface-3: #e3e5e7;   /* hover, selected */
   --surface-inverse: #1d2125;
+  /* Context bar stays dark in every theme: a bright band would glare in a darkened control room. */
+  --bar-bg: #1d2125;
+  --bar-text: #f5f6f7;
   --border-subtle: #d6d9dc;
   --border-strong: #9aa1a8;
 
@@ -108,6 +111,8 @@
     --surface-2: #22272b;
     --surface-3: #2d3338;
     --surface-inverse: #eceeef;
+    --bar-bg: #07090a;
+    --bar-text: #e8eaec;
     --border-subtle: #2f363b;
     --border-strong: #5b646c;
     --text-primary: #e8eaec;
@@ -135,10 +140,10 @@
     --safety-amber-bg: #2e2612;
     --safety-red: #ff8a80;
     --safety-red-bg: #3a1c1a;
-    --env-production: #e0564c;
+    --env-production: #b3261e;
     --env-staging: #d9a02a;
-    --env-lab: #9085e9;
-    --env-development: #7d868f;
+    --env-lab: #5b4ec2;
+    --env-development: #555d66;
     --series-1: #3987e5;
     --series-1-band: rgba(57, 135, 229, 0.22);
     --series-2: #d95926;
@@ -157,6 +162,8 @@
   --surface-2: #22272b;
   --surface-3: #2d3338;
   --surface-inverse: #eceeef;
+  --bar-bg: #07090a;
+  --bar-text: #e8eaec;
   --border-subtle: #2f363b;
   --border-strong: #5b646c;
   --text-primary: #e8eaec;
@@ -184,10 +191,10 @@
   --safety-amber-bg: #2e2612;
   --safety-red: #ff8a80;
   --safety-red-bg: #3a1c1a;
-  --env-production: #e0564c;
+  --env-production: #b3261e;
   --env-staging: #d9a02a;
-  --env-lab: #9085e9;
-  --env-development: #7d868f;
+  --env-lab: #5b4ec2;
+  --env-development: #555d66;
   --series-1: #3987e5;
   --series-1-band: rgba(57, 135, 229, 0.22);
   --series-2: #d95926;
@@ -205,6 +212,8 @@
   --surface-1: #ffffff;
   --surface-2: #f0f0f0;
   --surface-3: #d8d8d8;
+  --bar-bg: #000000;
+  --bar-text: #ffffff;
   --border-subtle: #000000;
   --border-strong: #000000;
   --border-width: 1px;

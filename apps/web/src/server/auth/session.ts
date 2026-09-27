@@ -183,13 +183,14 @@ export function csrfMatches(session: Session, provided: string | null | undefine
 }
 
 /**
- * Same-origin check for unsafe methods. Uses Fetch Metadata when present and falls back to
- * the Origin header. Combined with the session-bound CSRF token.
+ * Same-origin check for unsafe methods, always combined with the session-bound CSRF token.
+ * Fetch Metadata (`Sec-Fetch-Site`) is set by the browser and cannot be forged by page
+ * script, so it is authoritative when present. Browsers send `Origin: null` for form posts
+ * under `Referrer-Policy: no-referrer`, so Origin is only the fallback for older clients.
  */
 export function isSameOrigin(headers: Headers): boolean {
   const site = headers.get('sec-fetch-site');
-  if (site !== null && site !== 'same-origin') return false;
+  if (site !== null) return site === 'same-origin';
   const origin = headers.get('origin');
-  if (origin === null) return site === 'same-origin';
-  return origin === serverConfig().publicOrigin;
+  return origin !== null && origin !== 'null' && origin === serverConfig().publicOrigin;
 }
