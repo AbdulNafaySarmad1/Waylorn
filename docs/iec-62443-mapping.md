@@ -6,10 +6,10 @@ Status: preliminary engineering traceability, **not** a conformance statement or
 | --- | --- | --- |
 | 4-1 secure requirements and design | Security requirements, ADRs, threat models, trust boundaries, site safety assumptions, traceable acceptance criteria | Initial documents only |
 | 4-1 secure implementation | Coding rules, review, isolated FFI, pinned dependencies, signed builds, SBOM | Not implemented |
-| 4-1 verification/validation | Unit, fuzz, integration, failure, penetration, and HIL testing with retained results | Gate unit tests type-checked; not executed here |
+| 4-1 verification/validation | Unit, fuzz, integration, failure, penetration, and HIL testing with retained results | Five Rust and six .NET tests pass locally; no site/hardware validation |
 | 4-1 defect, patch, end-of-life management | Vulnerability intake, severity and remediation policy, offline update path, support lifecycle | Not implemented |
 | 4-2 component identification/authentication (IAC) | Device/workload identity, Keycloak federation, certificates, short-lived credentials | Not implemented |
-| 4-2 use control (UC) | RBAC+ABAC, explicit capability declaration, human approval and audit for consequential actions | Rust non-GREEN denial only; no production auth |
+| 4-2 use control (UC) | RBAC+ABAC, explicit capability declaration, human approval and audit for consequential actions | Rust non-GREEN denial; .NET role/site checks and approval records; full policy not implemented |
 | 4-2 system integrity (SI) | Signed releases, parser hardening, config integrity, tamper-evident evidence | Not implemented |
 | 4-2 data confidentiality (DC) | Local-first classification, encryption, approved egress | Not implemented |
 | 4-2 restricted data flow (RDF) | Zones/conduits, outbound site tunnel, no direct cloud/PLC routing | Design only |

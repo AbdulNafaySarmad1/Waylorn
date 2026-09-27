@@ -3,3 +3,8 @@
 *.lock text eol=lf
 *.md text eol=lf
 .gitignore text eol=lf
+*.cs text eol=lf
+*.csproj text eol=lf
+*.slnx text eol=lf
+*.proto text eol=lf
+*.sql text eol=lf

@@ -4,8 +4,8 @@
 
 | Phase | Deliverable | Exit evidence |
 | --- | --- | --- |
-| 0 — baseline (current) | Repository assessment, threat model, ADR, IEC planning map, Rust operation gate | Unit tests checked for compilation; execution awaits a linker on this machine. Explicit non-production status and no device I/O. |
-| 1 — read-only site pilot | One protocol adapter (select with pilot site), asset discovery/reconciliation, local telemetry store, Go outbound gateway, .NET asset/identity API | Lab hardware and malformed-traffic tests, WAN-off observation, tenant/site isolation, authenticated transport, recoverable local data. |
+| 0 — baseline (complete) | Repository assessment, threat model, ADR, IEC planning map, Rust operation gate | Five Rust tests pass with the GNU target. Explicit non-production status and no device I/O. |
+| 1 — read-only site pilot (partial) | One protocol adapter (select with pilot site), asset discovery/reconciliation, local telemetry store, Go outbound gateway, .NET asset/identity API | .NET inventory and approval slice builds; six tests pass. Lab hardware, WAN-off observation, live Keycloak/PostgreSQL and transport tests remain. |
 | 2 — operational platform | Versioned events, NATS for operations, Redpanda for streams, PostgreSQL reference data, Valkey cache, observability, Keycloak, classified egress | Broker/cache/database failure drills, restore test, audit integrity proof, ABAC decision evidence, air-gap install test. |
 | 3 — protocol and integration breadth | Additional OT adapters, constrained connector SDK, customer DB/ERP/SOC/cloud integrations | Protocol conformance matrix, vendor lab certification where required, connector isolation and revocation tests. |
 | 4 — controlled administration | AMBER command workflow with change ticket, approval, site-side reauthorization, durable audit | Hazard review, operator usability study, duplicate/replay/partition tests, rollback procedures. |
@@ -32,7 +32,7 @@ Evaluate license, maintenance history, CVEs, interoperability, offline availabil
 
 ## Test strategy
 
-1. **Logic and schema:** unit/property tests for capability defaults, RBAC/ABAC, egress classification, retention, command expiry/idempotency, and schema compatibility. Current gate has unit tests that type-check; they have not run on this machine because the MSVC linker is absent.
+1. **Logic and schema:** unit/property tests for capability defaults, RBAC/ABAC, egress classification, retention, command expiry/idempotency, and schema compatibility. Current Rust gate and .NET policy/HTTP/SQLite tests run locally; live infrastructure tests remain.
 2. **Protocol boundary:** parser corpora and continuous fuzzing for every adapter; differential tests against independent implementations where possible; real hardware and simulation with bounded polling. No active probing of customer networks without a site plan.
 3. **Integration:** contract tests for Keycloak, NATS, Redpanda, PostgreSQL, Valkey, storage, cloud and ERP/SOC connectors. Verify audit and authorization decisions across retries and crash recovery.
 4. **Failure drills:** cloud outage, WAN/DNS/IdP failure, NATS/Redpanda failure, Valkey loss, PostgreSQL failover, disk pressure, clock drift, certificate expiry, gateway restart, partial partition. Assert factory control remains independent and consequential operations deny on uncertainty.

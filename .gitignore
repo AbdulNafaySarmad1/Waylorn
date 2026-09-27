@@ -4,3 +4,6 @@
 .idea/
 *.user
 *.log
+**/bin/
+**/obj/
+*.userprefs

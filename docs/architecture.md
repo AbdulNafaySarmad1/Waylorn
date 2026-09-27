@@ -1,6 +1,6 @@
 # Architecture assessment and gap analysis
 
-Status: proposed baseline, 2026-09-27. Repository inspection found no application files, deployment manifests, tests, or prior architecture. Nothing described below is an existing production capability except the explicitly identified Rust policy gate.
+Status: evolving design, 2026-09-27. The initial repository was empty. A .NET 10 control-plane slice and the retained Rust OT gate now exist; the broader system below is still a target architecture. See [the control-plane status](control-plane.md) for implemented boundaries.
 
 ## Intended system boundary
 
@@ -34,7 +34,7 @@ The diagram is logical: deployment modes place these components at different loc
 | --- | --- | --- |
 | Equipment ↔ site agent | Rust | Protocol-specific adapters, bounded parsing, explicit operations; unknown equipment read-only. Loss of adapter stops collection, never initiates a write. |
 | Site ↔ external network | Go | Outbound-established mTLS connection, allowlisted routing and multiplexing. WAN loss queues allowed events locally; no remote command execution. |
-| Domain/API ↔ storage | .NET 10 | Modular monolith, tenant/site scopes, backend RBAC and ABAC, transactional command and audit records. Database failover makes mutations unavailable until consistency is restored. |
+| Domain/API ↔ storage | .NET 10 | Modular monolith, tenant/site scopes, backend authorization, transactional command and audit records. Database failover makes mutations unavailable until consistency is restored. Initial subset implemented; full ABAC remains open. |
 | Identity ↔ control plane | Keycloak | Federation, short-lived human/workload credentials; cached identity does not authorize new consequential operations during IdP outage. |
 | Modules ↔ event systems | NATS / Redpanda | NATS owns commands, acknowledgements, health, and short-lived operational state. Redpanda owns telemetry, security/audit, and integration history. Neither is authoritative for approvals or asset identity. |
 | Control plane ↔ AI | AI gateway | Classification and egress policy before model calls. Model output is advisory and cannot invoke physical-process commands. |
@@ -69,7 +69,7 @@ Billing and licensing never sit on the OT execution path. A license or billing o
 4. Approved request is placed on NATS with expiry, correlation ID, schema version, and replay protection. The site independently re-authorizes before execution. Acknowledgement and outcome are audited locally.
 5. No acknowledgement is interpreted as success. Timeout, partition, stale approval, missing audit store, or uncertain device state stops execution and requires reconciliation before retry.
 
-This path is a design target, not implemented. The current Rust gate rejects AMBER and RED unconditionally.
+This path is a design target. The current .NET slice records AMBER/RED requests and approvals but has no dispatch; the Rust gate rejects AMBER and RED unconditionally.
 
 ## Data and event ownership
 
@@ -105,10 +105,10 @@ The AI gateway is the only model egress path. It supports local providers (Ollam
 | Area | Today | Required before production |
 | --- | --- | --- |
 | OT safety | Pure Rust gate rejects AMBER/RED | Real adapters, parser fuzzing, site safety case, hardware-in-loop validation, isolation, explicit approved writes |
-| Identity and authorization | None | Keycloak federation, machine identity, RBAC+ABAC, offline policy behavior, auditable decisions |
-| Asset model | Documented only | Migrations, reconciliation, provenance, topology queries, tenant isolation |
+| Identity and authorization | JWT validation configuration and organization/site/role checks; test auth only in test host | Live Keycloak federation test, machine identity, full ABAC, offline policy behavior, auditable denials |
+| Asset model | Initial PostgreSQL schema, tenant filters, API CRUD and relationships | Real PostgreSQL migration test, reconciliation, provenance, topology queries |
 | Network plane | None | mTLS, certificate rotation, outbound tunnels, allowlisted routing, partition tests |
-| Eventing/storage | None | Versioned contracts, outbox/inbox, local store-and-forward, retention, integrity verification |
+| Eventing/storage | Protobuf draft and PostgreSQL migration SQL only | Live RPC, NATS/Redpanda, outbox/inbox, local store-and-forward, retention, integrity verification |
 | Data egress/AI | None | Classification, DLP, redaction, gateway policy, tool sandbox, no direct process controls |
 | Operations | None | RHEL hardening, observability, signed release pipeline, backup/restore, runbooks |
 | Interoperability | None | Protocol and connector conformance harnesses, vendor/lab matrix |
