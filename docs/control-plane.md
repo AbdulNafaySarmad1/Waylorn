@@ -10,7 +10,7 @@ Status: development slice, 2026-09-27. This is the primary application backend. 
 - `Api`: authenticated ASP.NET Core endpoints and organization/site/role policy checks.
 - `src/contracts/ot/v1/ot.proto`: versioned draft boundary with Rust/Go. Operation numeric codes match both .NET and Rust. No live RPC exists.
 
-The Rust crate remains at `crates/ot-core` because its code belongs to the OT plane. A small Go site gateway now handles the outbound observation pilot; it does not implement the planned general network plane.
+The Rust crate remains at `crates/ot-core` because its code belongs to the OT plane. A small Go site gateway now handles the outbound observation pilot, restricted to a loopback raw-observation API; it does not implement the planned general network plane.
 
 ## Configure and run
 

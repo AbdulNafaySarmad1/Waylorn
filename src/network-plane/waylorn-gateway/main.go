@@ -151,6 +151,11 @@ func loadConfig() (config, error) {
 			}
 		}
 	}
+	api, _ := url.Parse(c.apiURL)
+	ip := net.ParseIP(api.Hostname())
+	if ip == nil || !ip.IsLoopback() {
+		return c, errors.New("raw observations may only be sent to a loopback site-local API")
+	}
 	return c, nil
 }
 

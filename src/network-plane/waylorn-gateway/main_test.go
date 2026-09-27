@@ -56,3 +56,31 @@ func TestSpoolRetainsOutageAndDrainsAfterAcknowledgement(t *testing.T) {
 		t.Fatalf("acknowledged observation remained: %v, %v", files, err)
 	}
 }
+
+func TestRawObservationsRequireLoopbackApi(t *testing.T) {
+	for name, value := range map[string]string{
+		"WAYLORN_OT_READER":          t.TempDir() + "/ot-observe",
+		"WAYLORN_MODBUS_ADDRESS":     "127.0.0.1:1502",
+		"WAYLORN_MODBUS_KIND":        "holding",
+		"WAYLORN_SITE_ID":            "site",
+		"WAYLORN_ASSET_ID":           "asset",
+		"WAYLORN_API_URL":            "https://example.com",
+		"WAYLORN_OIDC_ISSUER":        "https://id.example.com",
+		"WAYLORN_OIDC_CLIENT_ID":     "agent",
+		"WAYLORN_OIDC_CLIENT_SECRET": "test-secret",
+		"WAYLORN_SPOOL_DIR":          t.TempDir(),
+		"WAYLORN_MODBUS_UNIT":        "1",
+		"WAYLORN_MODBUS_START":       "10",
+		"WAYLORN_MODBUS_COUNT":       "1",
+		"WAYLORN_POLL_INTERVAL_MS":   "1000",
+	} {
+		t.Setenv(name, value)
+	}
+	if _, err := loadConfig(); err == nil {
+		t.Fatal("remote raw telemetry destination was accepted")
+	}
+	t.Setenv("WAYLORN_API_URL", "https://127.0.0.1:18081")
+	if _, err := loadConfig(); err != nil {
+		t.Fatalf("loopback site API was rejected: %v", err)
+	}
+}
