@@ -31,10 +31,15 @@ public static class AssetEndpoints
         return Results.Ok(await db.Assets.AsNoTracking().Where(x => x.SiteId == siteId).OrderBy(x => x.Name).Take(500).ToListAsync(ct));
     }
 
-    private static async Task<IResult> GetAsset(Guid id, HttpContext http, WaylornDbContext db, CancellationToken ct)
+    private static async Task<IResult> GetAsset(Guid id, HttpContext http, WaylornDbContext db, AssetCache cache, CancellationToken ct)
     {
-        var asset = await db.Assets.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
-        if (asset is null) return Results.NotFound();
+        var asset = await cache.GetAsync(db.OrganizationId, id);
+        if (asset is null)
+        {
+            asset = await db.Assets.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (asset is not null) await cache.SetAsync(asset);
+        }
+        if (asset is null || asset.Deleted) return Results.NotFound();
         return AccessPolicy.CanRead(http.User, asset.SiteId) ? Results.Ok(asset) : Results.Forbid();
     }
 
@@ -57,7 +62,7 @@ public static class AssetEndpoints
         return Results.Created($"/api/v1/assets/{asset.Id}", asset);
     }
 
-    private static async Task<IResult> UpdateAsset(Guid id, AssetUpdate input, HttpContext http, WaylornDbContext db, CancellationToken ct)
+    private static async Task<IResult> UpdateAsset(Guid id, AssetUpdate input, HttpContext http, WaylornDbContext db, AssetCache cache, CancellationToken ct)
     {
         var asset = await db.Assets.SingleOrDefaultAsync(x => x.Id == id, ct);
         if (asset is null) return Results.NotFound();
@@ -78,10 +83,11 @@ public static class AssetEndpoints
         AuditWriter.Add(db, AccessPolicy.Subject(http.User), "asset.update", "asset", id, asset.SiteId);
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateConcurrencyException) { return Results.Conflict(); }
+        await cache.InvalidateAsync(db.OrganizationId, id);
         return Results.Ok(asset);
     }
 
-    private static async Task<IResult> DeleteAsset(Guid id, long version, HttpContext http, WaylornDbContext db, CancellationToken ct)
+    private static async Task<IResult> DeleteAsset(Guid id, long version, HttpContext http, WaylornDbContext db, AssetCache cache, CancellationToken ct)
     {
         var asset = await db.Assets.SingleOrDefaultAsync(x => x.Id == id, ct);
         if (asset is null) return Results.NotFound();
@@ -95,6 +101,7 @@ public static class AssetEndpoints
         AuditWriter.Add(db, AccessPolicy.Subject(http.User), "asset.delete", "asset", id, asset.SiteId);
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateConcurrencyException) { return Results.Conflict(); }
+        await cache.InvalidateAsync(db.OrganizationId, id);
         return Results.NoContent();
     }
 

@@ -101,6 +101,11 @@ public class ApiTests
         await using var ownerDb = new WaylornDbContext(options, new TenantScope(org));
         Assert.Equal(9, await ownerDb.Audit.CountAsync());
         Assert.Single(await ownerDb.Commands.ToListAsync());
+        Assert.Equal(9, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Audit));
+        Assert.Equal(2, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Control));
+        var eventPayload = JsonDocument.Parse((await ownerDb.Outbox.FirstAsync()).Payload);
+        Assert.Equal(1, eventPayload.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(org, eventPayload.RootElement.GetProperty("organizationId").GetGuid());
     }
 
     private static async Task<Guid> CreateAsset(HttpClient client, Guid site, string name)

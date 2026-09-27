@@ -70,6 +70,25 @@ public sealed class AuditRecord : ITenantOwned
     public DateTimeOffset AtUtc { get; set; }
 }
 
+public enum OutboxDestination { Audit, Control }
+
+public sealed class OutboxMessage : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid? SiteId { get; set; }
+    public OutboxDestination Destination { get; set; }
+    public string Subject { get; set; } = "";
+    public string Payload { get; set; } = "";
+    public DateTimeOffset CreatedUtc { get; set; }
+    public DateTimeOffset? PublishedUtc { get; set; }
+    public DateTimeOffset NextAttemptUtc { get; set; }
+    public DateTimeOffset? LeaseUntilUtc { get; set; }
+    public Guid? ClaimToken { get; set; }
+    public int Attempts { get; set; }
+    public string? LastError { get; set; }
+}
+
 public static class CommandPolicy
 {
     public static RiskClass Classify(OperationKind operation) => operation switch

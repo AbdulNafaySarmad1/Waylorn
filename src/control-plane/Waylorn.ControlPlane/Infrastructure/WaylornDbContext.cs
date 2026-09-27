@@ -15,6 +15,7 @@ public sealed class WaylornDbContext(DbContextOptions<WaylornDbContext> options,
     public DbSet<AssetRelation> Relationships => Set<AssetRelation>();
     public DbSet<CommandRequest> Commands => Set<CommandRequest>();
     public DbSet<AuditRecord> Audit => Set<AuditRecord>();
+    public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -76,6 +77,15 @@ public sealed class WaylornDbContext(DbContextOptions<WaylornDbContext> options,
             e.Property(x => x.TargetType).HasMaxLength(100);
             e.Property(x => x.Outcome).HasMaxLength(100);
             e.HasIndex(x => new { x.OrganizationId, x.AtUtc });
+            e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
+        });
+        model.Entity<OutboxMessage>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Destination).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Subject).HasMaxLength(160);
+            e.Property(x => x.LastError).HasMaxLength(500);
+            e.HasIndex(x => new { x.PublishedUtc, x.NextAttemptUtc, x.LeaseUntilUtc });
             e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
         });
     }

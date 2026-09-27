@@ -1,0 +1,61 @@
+name: waylorn-dev
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: waylorn
+      POSTGRES_USER: waylorn
+      POSTGRES_PASSWORD: ${WAYLORN_DB_PASSWORD:?set WAYLORN_DB_PASSWORD}
+    ports:
+      - "127.0.0.1:15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U waylorn -d waylorn"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.4
+    command: start-dev --http-enabled=true --hostname=http://127.0.0.1:18080
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${WAYLORN_KC_ADMIN_PASSWORD:?set WAYLORN_KC_ADMIN_PASSWORD}
+    ports:
+      - "127.0.0.1:18080:8080"
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:16379:6379"
+
+  nats:
+    image: nats:2.14.6-alpine
+    command: ["-js", "-sd", "/data"]
+    ports:
+      - "127.0.0.1:14222:4222"
+    volumes:
+      - nats_data:/data
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.2.3
+    command:
+      - redpanda
+      - start
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
+      - --mode=dev-container
+      - --smp=1
+    ports:
+      - "127.0.0.1:19092:19092"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+
+volumes:
+  postgres_data:
+  nats_data:
+  redpanda_data:

@@ -1,12 +1,12 @@
 # .NET 10 control-plane slice
 
-Status: development slice, 2026-09-27. This is the primary application backend. It builds and has HTTP/SQLite tests, but it is not deployable next to production equipment.
+Status: development slice, 2026-09-27. This is the primary application backend. It builds and has HTTP/SQLite tests and a live local integration test, but it is not deployable next to production equipment.
 
 ## Code ownership
 
 - `Domain`: asset, relationship, command and audit entities; fixed operation risk and approval rules.
-- `Application`: command request/approval transaction and audit writer.
-- `Infrastructure`: EF Core PostgreSQL context, tenant query/write guard, generated migration.
+- `Application`: command request/approval transaction and audit writer with transactional outbox.
+- `Infrastructure`: EF Core PostgreSQL context, tenant query/write guard, migrations, NATS/Redpanda outbox publishers, and a short-lived Valkey asset cache.
 - `Api`: authenticated ASP.NET Core endpoints and organization/site/role policy checks.
 - `src/contracts/ot/v1/ot.proto`: versioned draft boundary with Rust/Go. Operation numeric codes match both .NET and Rust. No live RPC exists.
 
@@ -16,9 +16,15 @@ The Rust crate remains at `crates/ot-core` because its code belongs to the OT pl
 
 Set `Authentication__Authority` to the HTTPS Keycloak realm URL, `Authentication__Audience` to the API client audience, and `ConnectionStrings__Waylorn` to a PostgreSQL connection string. Do not put secrets in the repository. The API refuses to start when any of these are missing. Keycloak must map `sub`, `org_id`, repeated `site_id` (or `*` for tenant-wide scope), `waylorn_role` (`Viewer`, `Operator`, `Administrator`, `Approver`), `principal_type=human` for approvers, and `amr` for strong-auth approval. These claim mappings are a contract to test against a real realm; they are not automatic Keycloak defaults.
 
-Apply the EF migration with `dotnet ef database update --project src/control-plane/Waylorn.ControlPlane --startup-project src/control-plane/Waylorn.ControlPlane` after configuring PostgreSQL. `deploy/postgres/initial.sql` is an idempotent review artifact generated from that migration. Neither migration path was executed against PostgreSQL on this host because no PostgreSQL server or Docker daemon was available.
+For the loopback-only development container, `ASPNETCORE_ENVIRONMENT=Development` and `Authentication__AllowInsecureLoopback=true` permit an `http://127.0.0.1` issuer. Production configuration still requires HTTPS metadata.
+
+Apply the EF migrations with `dotnet ef database update --project src/control-plane/Waylorn.ControlPlane --startup-project src/control-plane/Waylorn.ControlPlane` after configuring PostgreSQL. `deploy/postgres/initial.sql` is an idempotent review artifact generated from both migrations. Both migrations were applied to local PostgreSQL 17 in the development Compose stack.
 
 Run with `dotnet run --project src/control-plane/Waylorn.ControlPlane`. `/health/live` is process liveness; `/health/ready` checks database connectivity. API routes require a validated bearer token and are rate limited. Failures use RFC 7807 Problem Details where bodies are returned; no readiness claim covers Keycloak or brokers yet. ASP.NET Core traces are instrumented with OpenTelemetry.
+
+Set `Eventing:Enabled=true`, `Eventing:NatsUrl`, and `Eventing:KafkaBootstrapServers` to enable independent outbox publishers. Eventing is required by default outside Development. Provision the `WAYLORN_CONTROL` JetStream stream for `waylorn.control.v1.>` and the `waylorn.audit.v1` Kafka topic before production startup. `Eventing:BootstrapDestinations=true` is only for the local development stack. Audit events go only to Redpanda; command request and approval-record events go only to NATS. These are records of workflow state, **never executable OT commands**. Publishers claim rows with a lease and retry with backoff after broker failure. Delivery is at least once; consumers must deduplicate by `eventId`. The outbox must be monitored for age and retry count before any production use.
+
+Set `Cache:Endpoint` to enable Valkey for 30-second asset-detail reads. Authorization checks remain in the API after cache lookup, and writes and commands always use PostgreSQL. Cache loss falls back to PostgreSQL. An invalidation failure can leave a stale asset detail for up to 30 seconds, so this cache cannot be used to authorize consequential operations.
 
 ## Current HTTP routes
 
@@ -35,4 +41,6 @@ Run with `dotnet run --project src/control-plane/Waylorn.ControlPlane`. `/health
 | `GET /api/v1/commands/{id}` | Scoped command state. |
 | `POST /api/v1/commands/{id}/approve` | Separate Approver, current window, ticket, MFA for RED; writes audit. No dispatch. |
 
-The HTTP tests use an in-process fake identity service and SQLite to verify CRUD, relationship access, idempotency, approval, audit, readiness, tenant isolation, and optimistic concurrency. Production JWT validation and PostgreSQL execution require separate integration tests. NATS, Redpanda, Valkey, egress policy, AI governance, notification, billing, and infrastructure inventory are not implemented. An approval record must never be interpreted as OT authorization or physical execution.
+The HTTP tests use an in-process fake identity service and SQLite to verify CRUD, relationship access, idempotency, approval, audit, readiness, tenant isolation, and optimistic concurrency. The local Compose smoke verified real Keycloak JWT validation, PostgreSQL writes and migration, NATS and Redpanda outbox acknowledgements, NATS outage recovery while Redpanda continued, and Valkey loss with PostgreSQL fallback. This is local development evidence only. Egress policy, AI governance, notification, billing, infrastructure inventory, a Go gateway, a Rust transport bridge, and site hardware validation remain unimplemented. An approval record must never be interpreted as OT authorization or physical execution.
+
+The merged frontend's draft `/api/v0` contract remains separate from these `/api/v1` endpoints. Its richer models are not implemented by this service, so the frontend's development fixtures are not evidence of a working backend integration.

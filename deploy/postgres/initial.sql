@@ -1,4 +1,4 @@
-﻿CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
+CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
     "MigrationId" character varying(150) NOT NULL,
     "ProductVersion" character varying(32) NOT NULL,
     CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY ("MigrationId")
@@ -137,6 +137,46 @@ BEGIN
     IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927145909_InitialControlPlane') THEN
     INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260927145909_InitialControlPlane', '10.0.9');
+    END IF;
+END $EF$;
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927152445_AddOutbox') THEN
+    CREATE TABLE "Outbox" (
+        "Id" uuid NOT NULL,
+        "OrganizationId" uuid NOT NULL,
+        "SiteId" uuid,
+        "Destination" character varying(16) NOT NULL,
+        "Subject" character varying(160) NOT NULL,
+        "Payload" text NOT NULL,
+        "CreatedUtc" timestamp with time zone NOT NULL,
+        "PublishedUtc" timestamp with time zone,
+        "NextAttemptUtc" timestamp with time zone NOT NULL,
+        "LeaseUntilUtc" timestamp with time zone,
+        "ClaimToken" uuid,
+        "Attempts" integer NOT NULL,
+        "LastError" character varying(500),
+        CONSTRAINT "PK_Outbox" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927152445_AddOutbox') THEN
+    CREATE INDEX "IX_Outbox_PublishedUtc_NextAttemptUtc_LeaseUntilUtc" ON "Outbox" ("PublishedUtc", "NextAttemptUtc", "LeaseUntilUtc");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927152445_AddOutbox') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260927152445_AddOutbox', '10.0.9');
     END IF;
 END $EF$;
 COMMIT;

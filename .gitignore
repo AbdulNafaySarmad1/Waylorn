@@ -18,3 +18,4 @@ apps/web/next-env.d.ts
 **/bin/
 **/obj/
 *.userprefs
+deploy/dev/.env
