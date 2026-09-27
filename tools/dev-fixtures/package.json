@@ -1,0 +1,22 @@
+{
+  "name": "@waylorn/dev-fixtures",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DEVELOPMENT/TEST ONLY. Fixture implementation of the draft control-plane API and a development OIDC issuer. Never deploy.",
+  "scripts": {
+    "dev": "node src/server.ts",
+    "start": "node src/server.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "jose": "6.2.12"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "@waylorn/contracts": "workspace:*",
+    "typescript": "6.0.3",
+    "vitest": "5.0.2"
+  }
+}
