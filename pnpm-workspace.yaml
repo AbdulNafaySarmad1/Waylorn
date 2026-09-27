@@ -8,3 +8,7 @@ onlyBuiltDependencies:
   - esbuild
   - sharp
   - unrs-resolver
+
+# Reviewed and deliberately not run (only a postinstall notice; not needed at runtime).
+ignoredBuiltDependencies:
+  - protobufjs

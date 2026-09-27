@@ -40,6 +40,8 @@ interface Config {
   readonly redirectUris: readonly string[];
   readonly postLogoutRedirectUris: readonly string[];
   readonly accessTokenTtlSeconds: number;
+  /** Public (native) clients: no secret; PKCE is mandatory for every client anyway. */
+  readonly publicClients: readonly { readonly id: string; readonly redirectUris: readonly string[] }[];
 }
 
 interface PendingCode {
@@ -156,9 +158,11 @@ ${wantsMfa ? `<fieldset><legend>Step-up authentication requested (${ACR_MFA})</l
 
     if (path === '/authorize' && (req.method === 'GET' || req.method === 'POST')) {
       const params = req.method === 'GET' ? url.searchParams : new URLSearchParams(await readBody(req));
-      const clientId = params.get('client_id');
+      const clientId = params.get('client_id') ?? '';
       const redirectUri = params.get('redirect_uri') ?? '';
-      if (clientId !== config.clientId || !config.redirectUris.includes(redirectUri)) {
+      const allowed =
+        clientId === config.clientId ? config.redirectUris : config.publicClients.find((c) => c.id === clientId)?.redirectUris ?? [];
+      if (!allowed.includes(redirectUri)) {
         return text(res, 400, 'invalid client_id or unregistered redirect_uri');
       }
       if (params.get('response_type') !== 'code' || params.get('code_challenge_method') !== 'S256' || !params.get('code_challenge')) {
@@ -195,7 +199,7 @@ ${wantsMfa ? `<fieldset><legend>Step-up authentication requested (${ACR_MFA})</l
       const code = randomBytes(24).toString('base64url');
       codes.set(code, {
         user,
-        clientId: config.clientId,
+        clientId,
         redirectUri,
         codeChallenge: params.get('code_challenge') ?? '',
         nonce: params.get('nonce') ?? undefined,
@@ -216,14 +220,15 @@ ${wantsMfa ? `<fieldset><legend>Step-up authentication requested (${ACR_MFA})</l
     if (path === '/token' && req.method === 'POST') {
       const body = new URLSearchParams(await readBody(req));
       const auth = clientAuth(req, body);
-      if (!auth || auth.id !== config.clientId || !safeEqual(auth.secret, config.clientSecret)) {
-        return json(res, 401, { error: 'invalid_client' });
-      }
+      const publicClient = !auth ? config.publicClients.find((c) => c.id === body.get('client_id')) : undefined;
+      const confidentialOk = auth?.id === config.clientId && safeEqual(auth.secret, config.clientSecret);
+      if (!confidentialOk && !publicClient) return json(res, 401, { error: 'invalid_client' });
+      const clientId = publicClient?.id ?? config.clientId;
       const grantType = body.get('grant_type');
       if (grantType === 'authorization_code') {
         const code = codes.get(body.get('code') ?? '');
         codes.delete(body.get('code') ?? '');
-        if (!code || code.expiresAt < Date.now() || code.redirectUri !== body.get('redirect_uri')) {
+        if (!code || code.clientId !== clientId || code.expiresAt < Date.now() || code.redirectUri !== body.get('redirect_uri')) {
           return json(res, 400, { error: 'invalid_grant' });
         }
         const verifier = body.get('code_verifier') ?? '';

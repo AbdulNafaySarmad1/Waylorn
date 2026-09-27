@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Waylorn Field",
+    "slug": "waylorn-field",
+    "scheme": "waylorn",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "automatic",
+    "plugins": ["expo-router", "expo-secure-store"],
+    "ios": { "bundleIdentifier": "example.waylorn.field", "supportsTablet": true },
+    "android": { "package": "example.waylorn.field", "allowBackup": false },
+    "extra": {
+      "oidcIssuer": "http://localhost:4010/oidc",
+      "oidcClientId": "waylorn-mobile",
+      "apiBaseUrl": "http://localhost:4010"
+    }
+  }
+}

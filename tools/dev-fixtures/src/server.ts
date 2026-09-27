@@ -25,7 +25,8 @@ const issuer = await createIssuer({
   publicUrl,
   clientId: process.env['FIXTURE_CLIENT_ID'] ?? 'waylorn-web',
   clientSecret: process.env['FIXTURE_CLIENT_SECRET'] ?? 'dev-only-secret',
-  redirectUris: [`${webOrigin}/auth/callback`, 'waylorn://auth/callback'],
+  redirectUris: [`${webOrigin}/auth/callback`],
+  publicClients: [{ id: 'waylorn-mobile', redirectUris: ['waylorn://auth/callback', 'exp://127.0.0.1:8081/--/auth/callback'] }],
   postLogoutRedirectUris: [`${webOrigin}/signed-out`],
   accessTokenTtlSeconds: Number(process.env['FIXTURE_ACCESS_TTL'] ?? 300),
 });

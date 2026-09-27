@@ -104,6 +104,30 @@ describe('fixture OIDC issuer', () => {
     expect(token.status).toBe(400);
   });
 
+  it('accepts the public mobile client only with PKCE and its own redirect URI', async () => {
+    const verifier = randomBytes(32).toString('base64url');
+    const form = new URLSearchParams({
+      response_type: 'code',
+      client_id: 'waylorn-mobile',
+      redirect_uri: 'waylorn://auth/callback',
+      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+      code_challenge_method: 'S256',
+      user: 'u_keller',
+    });
+    const auth = await fetch(`${BASE}/oidc/authorize`, { method: 'POST', body: form, redirect: 'manual' });
+    const code = new URL(auth.headers.get('location') ?? '').searchParams.get('code') ?? '';
+    const exchange = (client_id: string) =>
+      fetch(`${BASE}/oidc/token`, {
+        method: 'POST',
+        body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: 'waylorn://auth/callback', code_verifier: verifier, client_id }),
+      });
+    // A code issued to the mobile client cannot be redeemed as the web client.
+    expect((await exchange('waylorn-web')).status).toBe(401);
+    expect((await exchange('waylorn-mobile')).status).toBe(200);
+    const webRedirect = await fetch(`${BASE}/oidc/authorize?client_id=waylorn-mobile&redirect_uri=${encodeURIComponent(REDIRECT)}&response_type=code`);
+    expect(webRedirect.status).toBe(400);
+  });
+
   it('rejects unregistered redirect URIs', async () => {
     const r = await fetch(`${BASE}/oidc/authorize?client_id=waylorn-web&redirect_uri=https://evil.example/cb&response_type=code`);
     expect(r.status).toBe(400);

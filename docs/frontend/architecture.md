@@ -105,9 +105,19 @@ Commands follow `select → preflight (backend policy evaluation) → review →
 | F3 | Mobile approvals with device-bound step-up, push via backend | Device security review, offline/degraded tests |
 | F4 | AMBER command execution UI against real workflow | Hazard review sign-off, operator usability study (ADR 0002) |
 
-## 9. What is intentionally not implemented
+## 9. Implementation status (F0)
+
+| Area | State |
+| --- | --- |
+| Overview, Sites, Assets (13 views), Topology, Incidents, Infrastructure, Cloud & cost, Storage, Reliability reviews, Audit, AI assistant, AI governance, Domains & edge | Implemented against the draft contract and fixture server |
+| Maintenance (org-wide), Telemetry explorer, Security posture, Policies, Access, Reports, Integrations, Administration | Reachable in navigation, marked "planned"; each page names the missing backend API. Per-asset maintenance, telemetry and security views exist. |
+| Command execution | Full request ceremony implemented; the backend (and the Rust gate) reject AMBER/RED, and the UI reports that outcome |
+| Mobile | Alerts, approvals (review only), asset lookup with snapshot values and work orders, site health; type-checked, linted, Metro-bundled |
+
+## 10. What is intentionally not implemented
 
 - No live telemetry or device data: all data in development comes from `tools/dev-fixtures`, every fixture response is marked `x-waylorn-data-source: fixture`, and the UI shows a persistent **Development fixture data** banner when it sees that header.
-- No Valkey session adapter yet: the in-memory store is single-instance and is refused at startup in production mode until a shared store is configured.
+- No Valkey session adapter yet: the in-memory store is single-instance and production start-up refuses it unless `WAYLORN_ALLOW_SINGLE_INSTANCE_SESSIONS=true` acknowledges a single-replica deployment.
 - No RED/AMBER execution path exists; the flow ends at the backend's decision.
+- Mobile approval actions: review only until device-bound step-up is designed (ADR 0013).
 - Storybook is deferred (ADR 0012); component tests and the fixture-backed app serve as living documentation until the component set stabilises.
