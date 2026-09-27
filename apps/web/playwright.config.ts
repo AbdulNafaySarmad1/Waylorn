@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 /**
  * E2E, accessibility, visual-regression, degraded-connectivity and performance tests run
- * against the production build pointed at tools/dev-fixtures (ADR 0012). Tests share one
+ * against the production build pointed at tools/dev-fixtures (ADR 0013). Tests share one
  * fixture server whose failure-injection state is global, so they run serially.
  */
 const WEB_PORT = 3100;

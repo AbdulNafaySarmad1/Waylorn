@@ -44,7 +44,7 @@ interface View {
 const HEALTH_GLYPH = { ok: 'check', warning: 'triangle', fault: 'cross', unknown: 'question' } as const;
 
 /**
- * Bounded topology exploration (ADR 0011). Never holds more than the client node budget;
+ * Bounded topology exploration (ADR 0012). Never holds more than the client node budget;
  * large neighbourhoods arrive as clusters. The table view is the accessible equivalent.
  * Callers key this component by focus so a new focus starts from fresh state.
  */

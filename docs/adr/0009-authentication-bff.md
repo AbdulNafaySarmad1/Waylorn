@@ -1,4 +1,4 @@
-# ADR 0008: Keycloak OIDC through a backend-for-frontend
+# ADR 0009: Keycloak OIDC through a backend-for-frontend
 
 Date: 2026-09-27. Status: accepted.
 

@@ -1,4 +1,4 @@
-# ADR 0011: Bounded topology exploration
+# ADR 0012: Bounded topology exploration
 
 Date: 2026-09-27. Status: accepted.
 

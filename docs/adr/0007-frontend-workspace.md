@@ -1,4 +1,4 @@
-# ADR 0006: Frontend workspace, framework and package boundaries
+# ADR 0007: Frontend workspace, framework and package boundaries
 
 Date: 2026-09-27. Status: accepted.
 

@@ -4,7 +4,7 @@ import { useNow } from '@/use-now';
 import { Body, Card, LoadState, Screen, Title } from '@/ui';
 
 /**
- * Review-only (ADR 0013). Approving consequential commands needs device-bound step-up
+ * Review-only (ADR 0014). Approving consequential commands needs device-bound step-up
  * authentication, which is not designed yet; approvals are completed on a workstation.
  */
 export default function Approvals() {

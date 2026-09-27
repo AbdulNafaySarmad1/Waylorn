@@ -1,5 +1,5 @@
 /**
- * Freshness classification for live values (ADR 0009). Operators must always be able
+ * Freshness classification for live values (ADR 0010). Operators must always be able
  * to tell whether a number is current; the classification is shown as text, not colour.
  */
 export type Freshness = 'fresh' | 'delayed' | 'stale' | 'unknown';

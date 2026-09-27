@@ -1,6 +1,6 @@
 import type { AssetKind, RelationType, TopologyEdge, TopologyGraph, TopologyNode } from '@waylorn/contracts';
 
-/** The client never holds more nodes than this (ADR 0011). */
+/** The client never holds more nodes than this (ADR 0012). */
 export const TOPOLOGY_NODE_BUDGET = 300;
 
 export const RELATION_LABEL: Readonly<Record<RelationType, string>> = {

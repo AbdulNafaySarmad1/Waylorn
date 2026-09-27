@@ -7,7 +7,7 @@ import { config } from './config';
 WebBrowser.maybeCompleteAuthSession();
 
 /**
- * Mobile authentication (ADR 0013): public OIDC client, Authorization Code + PKCE in the
+ * Mobile authentication (ADR 0014): public OIDC client, Authorization Code + PKCE in the
  * system browser, tokens only in the platform keystore via SecureStore. Authorization is
  * always decided by the control plane.
  */

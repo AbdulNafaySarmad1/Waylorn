@@ -100,7 +100,7 @@ export function createControlPlaneClient(options: ClientOptions) {
   return createClient<paths>(options);
 }
 
-/** Header the fixture server sets so the UI can label non-production data (ADR 0012). */
+/** Header the fixture server sets so the UI can label non-production data (ADR 0013). */
 export const DATA_SOURCE_HEADER = 'x-waylorn-data-source';
 export const CORRELATION_HEADER = 'x-correlation-id';
 

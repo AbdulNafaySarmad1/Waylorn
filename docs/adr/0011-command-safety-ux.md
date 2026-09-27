@@ -1,4 +1,4 @@
-# ADR 0010: Command safety user experience
+# ADR 0011: Command safety user experience
 
 Date: 2026-09-27. Status: accepted; execution is disabled by the backend (ADR 0002).
 

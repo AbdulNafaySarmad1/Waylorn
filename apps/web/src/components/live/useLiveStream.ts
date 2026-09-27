@@ -18,7 +18,7 @@ const HEARTBEAT_TIMEOUT_MS = 10_000;
 const MAX_BACKOFF_MS = 30_000;
 
 /**
- * Subscribes to an asset's live signals through the BFF SSE relay (ADR 0009). On failure it
+ * Subscribes to an asset's live signals through the BFF SSE relay (ADR 0010). On failure it
  * keeps the last values (marked unknown by the caller) and reconnects with backoff.
  */
 export function useLiveStream(url: string, initial: readonly LiveSignal[]): LiveStream {

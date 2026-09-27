@@ -1,7 +1,7 @@
 import 'server-only';
 
 /**
- * Server-side session storage (ADR 0008). Tokens never leave the server. The in-memory
+ * Server-side session storage (ADR 0009). Tokens never leave the server. The in-memory
  * implementation is single-instance; a shared (Valkey) implementation is required before
  * running more than one replica.
  */

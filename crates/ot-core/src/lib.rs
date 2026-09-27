@@ -4,16 +4,18 @@
 use std::collections::BTreeSet;
 
 /// Operations have fixed risk classes; an adapter cannot downgrade a write.
+/// Numeric values match src/contracts/ot/v1/ot.proto and the .NET domain.
+#[repr(i32)]
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Operation {
-    Discover,
-    Identify,
-    Read,
-    Subscribe,
-    Health,
-    ReadConfiguration,
-    ChangeConfiguration,
-    Write,
+    Discover = 1,
+    Identify = 2,
+    Read = 3,
+    Subscribe = 4,
+    Health = 5,
+    ReadConfiguration = 6,
+    ChangeConfiguration = 7,
+    Write = 8,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -129,5 +131,12 @@ mod tests {
         assert_eq!(Operation::ReadConfiguration.risk(), Risk::Green);
         assert_eq!(Operation::ChangeConfiguration.risk(), Risk::Amber);
         assert_eq!(Operation::Write.risk(), Risk::Red);
+    }
+
+    #[test]
+    fn operation_codes_match_v1_contract() {
+        assert_eq!(Operation::Read as i32, 3);
+        assert_eq!(Operation::ChangeConfiguration as i32, 7);
+        assert_eq!(Operation::Write as i32, 8);
     }
 }

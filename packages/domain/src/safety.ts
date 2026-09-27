@@ -1,7 +1,7 @@
 import type { PreflightResult, SafetyClass } from '@waylorn/contracts';
 
 /**
- * Safety-class presentation (ADR 0002, ADR 0010). The UI never assigns a class; it renders
+ * Safety-class presentation (ADR 0002, ADR 0011). The UI never assigns a class; it renders
  * what the backend returns. A missing class is treated as RED.
  */
 export function effectiveSafetyClass(value: SafetyClass | undefined | null): SafetyClass {

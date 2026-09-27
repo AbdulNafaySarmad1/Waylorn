@@ -3,7 +3,7 @@ info:
   title: Waylorn control-plane API (DRAFT)
   version: 0.1.0-draft
   description: |
-    DRAFT contract proposed by the frontend (ADR 0007). The .NET control plane does not
+    DRAFT contract proposed by the frontend (ADR 0008). The .NET control plane does not
     implement it yet. When the backend exists it emits the authoritative document and this
     file is replaced.
 

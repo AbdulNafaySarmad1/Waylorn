@@ -12,7 +12,7 @@ import { createIssuer } from './oidc.ts';
 import { readBody } from './oidc.ts';
 
 if (process.env['NODE_ENV'] === 'production') {
-  console.error('Refusing to start: the fixture server is development/test only (ADR 0012).');
+  console.error('Refusing to start: the fixture server is development/test only (ADR 0013).');
   process.exit(1);
 }
 

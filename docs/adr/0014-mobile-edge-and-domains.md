@@ -1,4 +1,4 @@
-# ADR 0013: Mobile scope, edge protection and custom domains in the client
+# ADR 0014: Mobile scope, edge protection and custom domains in the client
 
 Date: 2026-09-27. Status: accepted.
 

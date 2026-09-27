@@ -1,4 +1,4 @@
-# ADR 0012: Frontend test strategy and fixture isolation
+# ADR 0013: Frontend test strategy and fixture isolation
 
 Date: 2026-09-27. Status: accepted.
 

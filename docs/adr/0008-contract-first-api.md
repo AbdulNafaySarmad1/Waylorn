@@ -1,4 +1,4 @@
-# ADR 0007: Contract-first API with generated clients
+# ADR 0008: Contract-first API with generated clients
 
 Date: 2026-09-27. Status: accepted; the draft contract is provisional.
 
@@ -17,3 +17,7 @@ The .NET control plane does not exist yet. Hand-writing DTOs in the frontend wou
 ## Consequences
 
 The backend team can change the contract, and the frontend recompiles against it; breaking changes surface as type errors. The draft can be wrong; the first backend integration is expected to revise it.
+
+## Update 2026-09-27
+
+The .NET control-plane slice (ADR 0006) now exists with its own `/api/v1` shapes. The draft remains the console's contract until the .NET build emits an OpenAPI document; the differences and the alignment plan are in [frontend architecture §10](../frontend/architecture.md).

@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package waylorn.ot.v1;
+
+option csharp_namespace = "Waylorn.Contracts.Ot.V1";
+
+// Contract draft. No runtime transport is connected in this repository yet.
+message AssetRef {
+  string organization_id = 1;
+  string site_id = 2;
+  string asset_id = 3;
+}
+
+enum Operation {
+  OPERATION_UNSPECIFIED = 0;
+  OPERATION_DISCOVER = 1;
+  OPERATION_IDENTIFY = 2;
+  OPERATION_READ = 3;
+  OPERATION_SUBSCRIBE = 4;
+  OPERATION_HEALTH = 5;
+  OPERATION_READ_CONFIGURATION = 6;
+  OPERATION_CHANGE_CONFIGURATION = 7;
+  OPERATION_WRITE = 8;
+}
+
+message ObservationRequest {
+  string request_id = 1;
+  AssetRef asset = 2;
+  Operation operation = 3;
+  string capability = 4;
+  int64 expires_unix_ms = 5;
+}
+
+message ObservationResult {
+  string request_id = 1;
+  bool accepted = 2;
+  string reason_code = 3;
+  int64 observed_unix_ms = 4;
+}

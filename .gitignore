@@ -15,3 +15,6 @@ test-results/
 *.tsbuildinfo
 .env*.local
 apps/web/next-env.d.ts
+**/bin/
+**/obj/
+*.userprefs

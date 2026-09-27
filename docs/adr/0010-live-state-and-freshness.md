@@ -1,4 +1,4 @@
-# ADR 0009: Live state transport and staleness semantics
+# ADR 0010: Live state transport and staleness semantics
 
 Date: 2026-09-27. Status: accepted.
 

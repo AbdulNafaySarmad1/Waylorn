@@ -6,7 +6,7 @@ Exact versions are pinned in each `package.json` and `pnpm-lock.yaml`; `pnpm ins
 | --- | --- | --- | --- |
 | next 16, react 19 | web | App Router, Server Components, Node proxy for CSP | Standalone output for OCI images |
 | openid-client 6 | web (server) | Certified OIDC RP; PKCE, nonce, `max_age`, RP-initiated logout | Only runs server-side |
-| openapi-typescript 7, openapi-fetch 0.17 | contracts | Generated types and typed client (ADR 0007) | Generated output committed |
+| openapi-typescript 7, openapi-fetch 0.17 | contracts | Generated types and typed client (ADR 0008) | Generated output committed |
 | @tanstack/react-virtual 3 | web | Event log virtualisation | Headless |
 | @opentelemetry/* | web | Server (NodeSDK) and opt-in browser tracing | Exporters only when configured |
 | jose 6 | fixtures | Development issuer token signing | Dev/test only |
@@ -15,7 +15,7 @@ Exact versions are pinned in each `package.json` and `pnpm-lock.yaml`; `pnpm ins
 | typescript 6.0 | all | Pinned below 7.x until typescript-eslint and Next.js support the native compiler | |
 | eslint 9 | all | `eslint-plugin-jsx-a11y` does not support ESLint 10 yet | |
 
-No UI component library, CSS framework, charting library or hosted fonts are used (ADR 0006).
+No UI component library, CSS framework, charting library or hosted fonts are used (ADR 0007).
 
 ## Known advisories (2026-09-27)
 

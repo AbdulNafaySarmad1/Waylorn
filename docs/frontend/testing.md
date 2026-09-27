@@ -1,6 +1,6 @@
 # Frontend test strategy and how to run it
 
-See ADR 0012 for the decisions. Every layer runs offline against `tools/dev-fixtures`; nothing here talks to real equipment.
+See ADR 0013 for the decisions. Every layer runs offline against `tools/dev-fixtures`; nothing here talks to real equipment.
 
 | Layer | Tooling | Location | What it proves |
 | --- | --- | --- | --- |

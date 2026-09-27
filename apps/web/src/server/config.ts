@@ -62,7 +62,7 @@ export function serverConfig(): ServerConfig {
   if (new URL(apiBaseUrl).protocol === 'http:' && !isLoopback(apiBaseUrl)) throw new Error('WAYLORN_API_BASE_URL must use https');
 
   const store = process.env['WAYLORN_SESSION_STORE'] ?? 'memory';
-  if (store !== 'memory') throw new Error(`Unsupported WAYLORN_SESSION_STORE "${store}" (a Valkey adapter is planned, see ADR 0008)`);
+  if (store !== 'memory') throw new Error(`Unsupported WAYLORN_SESSION_STORE "${store}" (a Valkey adapter is planned, see ADR 0009)`);
   if (production && process.env['WAYLORN_ALLOW_SINGLE_INSTANCE_SESSIONS'] !== 'true') {
     throw new Error(
       'The in-memory session store is single-instance only. Set WAYLORN_ALLOW_SINGLE_INSTANCE_SESSIONS=true to acknowledge this for a single-replica deployment or test run.',
