@@ -64,11 +64,11 @@ The frontend also uses a read-only `/api/v0` adapter:
 | `GET /api/v0/orgs/{orgId}/assets/{assetId}/live` | Latest site-local numeric signal values with explicit freshness quality. |
 | `GET /api/v0/orgs/{orgId}/assets/{assetId}/live/stream` | Current-state SSE signals and heartbeat; reconnect starts with current state. |
 | `GET /api/v0/orgs/{orgId}/assets/{assetId}/telemetry/signals` | Keys with retained numeric history. |
-| `GET /api/v0/orgs/{orgId}/assets/{assetId}/telemetry/series` | Bounded seven-day server aggregation, up to 2,000 buckets. |
+| `GET /api/v0/orgs/{orgId}/assets/{assetId}/telemetry/series` | Bounded retention-window server aggregation, up to 2,000 buckets. |
 | `GET /api/v0/orgs/{orgId}/incidents` | Site-scoped incident list with status filter and pagination. |
 | `GET /api/v0/orgs/{orgId}/assets/{assetId}/maintenance` | Internal Waylorn work orders for a visible asset. |
 
-Raw telemetry ingestion requires `Telemetry:AcceptRawObservations=true`, set only where the PostgreSQL instance is a customer-controlled site-local store. The default is disabled. Samples older than seven days are excluded from queries and removed by an hourly retention worker. This numeric register pilot does not provide Redpanda telemetry streaming, calibrated units, or sensor quality certification.
+Raw telemetry ingestion requires `Telemetry:AcceptRawObservations=true`, set only where the PostgreSQL instance is a customer-controlled site-local store. The default is disabled. `Telemetry:RetentionDays` defaults to 7 and must be 1–365; startup rejects other values. Ingestion and queries apply the same window, and an hourly worker removes expired samples. Reducing retention makes older spooled observations unreplayable, so site administrators must coordinate the gateway spool policy. This numeric register pilot does not provide Redpanda telemetry streaming, calibrated units, or sensor quality certification.
 
 Registry assets have no tag, lifecycle, or measured health fields yet. The adapter emits an `UNASSIGNED-{id}` display tag and explicit `unknown` state. It does not infer site connectivity or OT capabilities. Offset pagination is not stable across concurrent inventory changes; use the `/api/v1` audit cursor for stable audit browsing.
 

@@ -12,6 +12,7 @@ public static class ObservationEndpoints
         api.MapPost("/observations", Ingest);
 
     private static async Task<IResult> Ingest(ObservationBatch input, HttpContext http, IConfiguration config,
+        TelemetryPolicy telemetry,
         WaylornDbContext db, CancellationToken ct)
     {
         if (!config.GetValue("Telemetry:AcceptRawObservations", false))
@@ -25,7 +26,7 @@ public static class ObservationEndpoints
         var now = DateTimeOffset.UtcNow;
         if (input.SchemaVersion != 1 || input.RequestId == Guid.Empty || input.SiteId == Guid.Empty || input.AssetId == Guid.Empty ||
             input.Source is not { Length: > 0 and <= 120 } ||
-            input.ObservedUtc < now - TelemetryPolicy.Retention || input.ObservedUtc > now.AddMinutes(2) ||
+            input.ObservedUtc < now - telemetry.Retention || input.ObservedUtc > now.AddMinutes(2) ||
             input.ExpectedIntervalMs is < 250 or > 3_600_000 ||
             input.Values is not { Length: > 0 and <= 125 } ||
             input.Values.Any(x => x is null || x.SignalKey is not { Length: > 0 and <= 80 } ||

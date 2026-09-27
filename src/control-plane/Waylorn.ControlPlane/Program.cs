@@ -29,6 +29,10 @@ builder.Services.AddScoped(sp =>
 });
 builder.Services.AddDbContext<WaylornDbContext>(options => options.UseNpgsql(connection));
 builder.Services.AddSingleton<AssetCache>();
+var retentionDays = builder.Configuration.GetValue("Telemetry:RetentionDays", 7);
+if (retentionDays is < 1 or > 365)
+    throw new InvalidOperationException("Telemetry retention must be between 1 and 365 days.");
+builder.Services.AddSingleton(new TelemetryPolicy(retentionDays));
 builder.Services.AddHostedService<TelemetryRetentionWorker>();
 builder.Services.AddScoped<CommandWorkflow>();
 var eventingEnabled = builder.Configuration.GetValue("Eventing:Enabled", !builder.Environment.IsDevelopment());

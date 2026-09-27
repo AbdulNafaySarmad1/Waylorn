@@ -53,6 +53,7 @@ public class ApiTests
             host.UseSetting("Authentication:Audience", "waylorn-api");
             host.UseSetting("ConnectionStrings:Waylorn", "Host=localhost;Database=unused");
             host.UseSetting("Telemetry:AcceptRawObservations", "true");
+            host.UseSetting("Telemetry:RetentionDays", "1");
             host.ConfigureTestServices(services =>
             {
                 services.RemoveAll<DbContextOptions<WaylornDbContext>>();
@@ -122,6 +123,11 @@ public class ApiTests
         SetIdentity(client, org, site, "SiteAgent", "agent-1");
         Assert.Equal(HttpStatusCode.Accepted,
             (await client.PostAsJsonAsync("/api/v1/observations", observation)).StatusCode);
+        var expired = new { observation.schemaVersion, requestId = Guid.NewGuid(), observation.siteId,
+            observation.assetId, observation.source, observedUtc = DateTimeOffset.UtcNow.AddDays(-2),
+            observation.expectedIntervalMs, observation.values };
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await client.PostAsJsonAsync("/api/v1/observations", expired)).StatusCode);
         Assert.Equal(HttpStatusCode.OK,
             (await client.PostAsJsonAsync("/api/v1/observations", observation)).StatusCode);
         var changed = new { observation.schemaVersion, observation.requestId, observation.siteId, observation.assetId,
@@ -145,6 +151,7 @@ public class ApiTests
         }
         var signalList = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/assets/{first}/telemetry/signals");
         Assert.Equal("modbus.holding.10", signalList.GetProperty("items")[0].GetProperty("key").GetString());
+        Assert.Equal("P1D", signalList.GetProperty("items")[0].GetProperty("retention").GetString());
         var seriesUrl = $"/api/v0/orgs/{org}/assets/{first}/telemetry/series?signal=modbus.holding.10" +
             $"&from={Uri.EscapeDataString(observed.AddMinutes(-1).ToString("O"))}" +
             $"&to={Uri.EscapeDataString(observed.AddMinutes(1).ToString("O"))}&maxPoints=100";

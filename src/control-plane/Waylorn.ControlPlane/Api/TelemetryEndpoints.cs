@@ -17,10 +17,10 @@ public static class TelemetryEndpoints
     }
 
     private static async Task<IResult> Snapshot(Guid orgId, Guid assetId, HttpContext http,
-        WaylornDbContext db, CancellationToken ct)
+        WaylornDbContext db, TelemetryPolicy telemetry, CancellationToken ct)
     {
         if (!await VisibleAsset(orgId, assetId, http, db, ct)) return Results.NotFound();
-        var cutoff = DateTime.UtcNow - TelemetryPolicy.Retention;
+        var cutoff = DateTime.UtcNow - telemetry.Retention;
         var samples = await db.Telemetry.AsNoTracking().Where(x => x.AssetId == assetId && x.ObservedUtc >= cutoff)
             .GroupBy(x => x.SignalKey)
             .Select(group => group.OrderByDescending(x => x.ObservedUtc).ThenByDescending(x => x.ReceivedUtc).First())
@@ -41,7 +41,7 @@ public static class TelemetryEndpoints
     }
 
     private static async Task<IResult> Stream(Guid orgId, Guid assetId, HttpContext http,
-        WaylornDbContext db, CancellationToken ct)
+        WaylornDbContext db, TelemetryPolicy telemetry, CancellationToken ct)
     {
         if (!await VisibleAsset(orgId, assetId, http, db, ct)) return Results.NotFound();
         http.Response.Headers.CacheControl = "no-store";
@@ -53,7 +53,7 @@ public static class TelemetryEndpoints
             while (!ct.IsCancellationRequested && DateTime.UtcNow < expires)
             {
                 var now = DateTime.UtcNow;
-                var cutoff = now - TelemetryPolicy.Retention;
+                var cutoff = now - telemetry.Retention;
                 var samples = await db.Telemetry.AsNoTracking()
                     .Where(x => x.AssetId == assetId && x.ObservedUtc >= cutoff)
                     .GroupBy(x => x.SignalKey)
@@ -85,24 +85,24 @@ public static class TelemetryEndpoints
     }
 
     private static async Task<IResult> Signals(Guid orgId, Guid assetId, HttpContext http,
-        WaylornDbContext db, CancellationToken ct)
+        WaylornDbContext db, TelemetryPolicy telemetry, CancellationToken ct)
     {
         if (!await VisibleAsset(orgId, assetId, http, db, ct)) return Results.NotFound();
-        var cutoff = DateTime.UtcNow - TelemetryPolicy.Retention;
+        var cutoff = DateTime.UtcNow - telemetry.Retention;
         var keys = await db.Telemetry.AsNoTracking().Where(x => x.AssetId == assetId && x.ObservedUtc >= cutoff)
             .Select(x => x.SignalKey).Distinct().OrderBy(x => x).Take(201).ToListAsync(ct);
         if (keys.Count > 200) return Results.Problem(statusCode: 413, detail: "Asset has too many signals for this API.");
-        return Results.Ok(new { items = keys.Select(key => new { key, label = key, retention = "P7D" }) });
+        return Results.Ok(new { items = keys.Select(key => new { key, label = key, retention = telemetry.IsoPeriod }) });
     }
 
     private static async Task<IResult> Series(Guid orgId, Guid assetId, string signal,
         DateTimeOffset from, DateTimeOffset to, int? maxPoints, HttpContext http,
-        WaylornDbContext db, CancellationToken ct)
+        WaylornDbContext db, TelemetryPolicy telemetry, CancellationToken ct)
     {
         if (!await VisibleAsset(orgId, assetId, http, db, ct)) return Results.NotFound();
         if (string.IsNullOrWhiteSpace(signal) || signal.Length > 80 || from >= to ||
-            from < DateTimeOffset.UtcNow - TelemetryPolicy.Retention ||
-            to > DateTimeOffset.UtcNow.AddMinutes(2) || to - from > TelemetryPolicy.Retention ||
+            from < DateTimeOffset.UtcNow - telemetry.Retention ||
+            to > DateTimeOffset.UtcNow.AddMinutes(2) || to - from > telemetry.Retention ||
             maxPoints is < 10 or > 2000) return Results.BadRequest();
         var pointLimit = maxPoints ?? 600;
         var rows = await db.Telemetry.AsNoTracking()

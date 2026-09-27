@@ -1,7 +1,7 @@
 namespace Waylorn.ControlPlane.Application;
 
-public static class TelemetryPolicy
+public sealed class TelemetryPolicy(int retentionDays)
 {
-    public const int RetentionDays = 7;
-    public static readonly TimeSpan Retention = TimeSpan.FromDays(RetentionDays);
+    public TimeSpan Retention { get; } = TimeSpan.FromDays(retentionDays);
+    public string IsoPeriod { get; } = $"P{retentionDays}D";
 }

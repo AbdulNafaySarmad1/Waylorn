@@ -3,7 +3,7 @@ using Waylorn.ControlPlane.Application;
 
 namespace Waylorn.ControlPlane.Infrastructure;
 
-public sealed class TelemetryRetentionWorker(IServiceScopeFactory scopes,
+public sealed class TelemetryRetentionWorker(IServiceScopeFactory scopes, TelemetryPolicy telemetry,
     ILogger<TelemetryRetentionWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -17,7 +17,7 @@ public sealed class TelemetryRetentionWorker(IServiceScopeFactory scopes,
             {
                 using var scope = scopes.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<WaylornDbContext>();
-                var cutoff = DateTime.UtcNow - TelemetryPolicy.Retention;
+                var cutoff = DateTime.UtcNow - telemetry.Retention;
                 var deleted = await db.Telemetry.IgnoreQueryFilters()
                     .Where(x => x.ObservedUtc < cutoff).ExecuteDeleteAsync(stoppingToken);
                 if (deleted > 0) logger.LogInformation("Deleted {Count} expired site telemetry samples", deleted);
