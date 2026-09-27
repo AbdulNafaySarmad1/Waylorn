@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Waylorn.ControlPlane.Infrastructure;
@@ -11,9 +12,11 @@ using Waylorn.ControlPlane.Infrastructure;
 namespace Waylorn.ControlPlane.Infrastructure.Migrations
 {
     [DbContext(typeof(WaylornDbContext))]
-    partial class WaylornDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260927200159_AddIncidentsAndMaintenance")]
+    partial class AddIncidentsAndMaintenance
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -616,13 +619,6 @@ namespace Waylorn.ControlPlane.Infrastructure.Migrations
                         .HasPrincipalKey("OrganizationId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.HasOne("Waylorn.ControlPlane.Domain.Site", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "SiteId")
-                        .HasPrincipalKey("OrganizationId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Waylorn.ControlPlane.Domain.IncidentAsset", b =>
@@ -647,13 +643,6 @@ namespace Waylorn.ControlPlane.Infrastructure.Migrations
                     b.HasOne("Waylorn.ControlPlane.Domain.Asset", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId", "AssetId")
-                        .HasPrincipalKey("OrganizationId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Waylorn.ControlPlane.Domain.Site", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "SiteId")
                         .HasPrincipalKey("OrganizationId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();

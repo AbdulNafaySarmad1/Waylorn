@@ -7,6 +7,10 @@ public enum OperationKind { Unspecified = 0, Discover = 1, Identify = 2, Read = 
     Health = 5, ReadConfiguration = 6, ChangeConfiguration = 7, Write = 8 }
 public enum RiskClass { Green, Amber, Red }
 public enum CommandState { Pending, Approved, Rejected }
+public enum IncidentSeverity { Info, Notice, Warning, Critical }
+public enum IncidentState { Open, Acknowledged, Mitigated, Resolved }
+public enum WorkOrderType { Preventive, Corrective, Inspection, Calibration }
+public enum WorkOrderState { Planned, Scheduled, InProgress, Completed, Cancelled }
 
 public interface ITenantOwned { Guid OrganizationId { get; } }
 
@@ -118,7 +122,47 @@ public sealed class TelemetrySample : ITenantOwned
     public int ExpectedIntervalMs { get; set; }
 }
 
-public enum OutboxDestination { Audit, Control }
+public sealed class Incident : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid SiteId { get; set; }
+    public Guid PrimaryAssetId { get; set; }
+    public string Title { get; set; } = "";
+    public IncidentSeverity Severity { get; set; }
+    public IncidentState State { get; set; }
+    public string OpenedBy { get; set; } = "";
+    public string? Owner { get; set; }
+    public DateTime OpenedUtc { get; set; }
+    public DateTime UpdatedUtc { get; set; }
+    public long Version { get; set; } = 1;
+}
+
+public sealed class IncidentAsset : ITenantOwned
+{
+    public Guid OrganizationId { get; set; }
+    public Guid IncidentId { get; set; }
+    public Guid AssetId { get; set; }
+}
+
+public sealed class MaintenanceWorkOrder : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid SiteId { get; set; }
+    public Guid AssetId { get; set; }
+    public string Title { get; set; } = "";
+    public WorkOrderType Type { get; set; }
+    public WorkOrderState State { get; set; }
+    public DateTime? DueUtc { get; set; }
+    public DateTime? CompletedUtc { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public long Version { get; set; } = 1;
+    public DateTime CreatedUtc { get; set; }
+    public DateTime UpdatedUtc { get; set; }
+}
+
+public enum OutboxDestination { Audit, Control, Operations }
 
 public sealed class OutboxMessage : ITenantOwned
 {

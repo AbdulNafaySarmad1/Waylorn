@@ -307,3 +307,109 @@ BEGIN
     END IF;
 END $EF$;
 COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927200159_AddIncidentsAndMaintenance') THEN
+    CREATE TABLE "Incidents" (
+        "Id" uuid NOT NULL,
+        "OrganizationId" uuid NOT NULL,
+        "SiteId" uuid NOT NULL,
+        "PrimaryAssetId" uuid NOT NULL,
+        "Title" character varying(200) NOT NULL,
+        "Severity" character varying(16) NOT NULL,
+        "State" character varying(20) NOT NULL,
+        "OpenedBy" character varying(200) NOT NULL,
+        "Owner" character varying(200),
+        "OpenedUtc" timestamp with time zone NOT NULL,
+        "UpdatedUtc" timestamp with time zone NOT NULL,
+        "Version" bigint NOT NULL,
+        CONSTRAINT "PK_Incidents" PRIMARY KEY ("Id"),
+        CONSTRAINT "AK_Incidents_OrganizationId_Id" UNIQUE ("OrganizationId", "Id"),
+        CONSTRAINT "FK_Incidents_Assets_OrganizationId_PrimaryAssetId" FOREIGN KEY ("OrganizationId", "PrimaryAssetId") REFERENCES "Assets" ("OrganizationId", "Id") ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927200159_AddIncidentsAndMaintenance') THEN
+    CREATE TABLE "WorkOrders" (
+        "Id" uuid NOT NULL,
+        "OrganizationId" uuid NOT NULL,
+        "SiteId" uuid NOT NULL,
+        "AssetId" uuid NOT NULL,
+        "Title" character varying(200) NOT NULL,
+        "Type" character varying(20) NOT NULL,
+        "State" character varying(20) NOT NULL,
+        "DueUtc" timestamp with time zone,
+        "CompletedUtc" timestamp with time zone,
+        "CreatedBy" character varying(200) NOT NULL,
+        "Version" bigint NOT NULL,
+        "CreatedUtc" timestamp with time zone NOT NULL,
+        "UpdatedUtc" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_WorkOrders" PRIMARY KEY ("Id"),
+        CONSTRAINT "FK_WorkOrders_Assets_OrganizationId_AssetId" FOREIGN KEY ("OrganizationId", "AssetId") REFERENCES "Assets" ("OrganizationId", "Id") ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927200159_AddIncidentsAndMaintenance') THEN
+    CREATE TABLE "IncidentAssets" (
+        "OrganizationId" uuid NOT NULL,
+        "IncidentId" uuid NOT NULL,
+        "AssetId" uuid NOT NULL,
+        CONSTRAINT "PK_IncidentAssets" PRIMARY KEY ("OrganizationId", "IncidentId", "AssetId"),
+        CONSTRAINT "FK_IncidentAssets_Assets_OrganizationId_AssetId" FOREIGN KEY ("OrganizationId", "AssetId") REFERENCES "Assets" ("OrganizationId", "Id") ON DELETE RESTRICT,
+        CONSTRAINT "FK_IncidentAssets_Incidents_OrganizationId_IncidentId" FOREIGN KEY ("OrganizationId", "IncidentId") REFERENCES "Incidents" ("OrganizationId", "Id") ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927200159_AddIncidentsAndMaintenance') THEN
+    CREATE INDEX "IX_IncidentAssets_OrganizationId_AssetId" ON "IncidentAssets" ("OrganizationId", "AssetId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927200159_AddIncidentsAndMaintenance') THEN
+    CREATE INDEX "IX_Incidents_OrganizationId_PrimaryAssetId" ON "Incidents" ("OrganizationId", "PrimaryAssetId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927200159_AddIncidentsAndMaintenance') THEN
+    CREATE INDEX "IX_Incidents_OrganizationId_SiteId_OpenedUtc" ON "Incidents" ("OrganizationId", "SiteId", "OpenedUtc");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927200159_AddIncidentsAndMaintenance') THEN
+    CREATE INDEX "IX_WorkOrders_OrganizationId_AssetId" ON "WorkOrders" ("OrganizationId", "AssetId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927200159_AddIncidentsAndMaintenance') THEN
+    CREATE INDEX "IX_WorkOrders_OrganizationId_SiteId_AssetId" ON "WorkOrders" ("OrganizationId", "SiteId", "AssetId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927200159_AddIncidentsAndMaintenance') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260927200159_AddIncidentsAndMaintenance', '10.0.9');
+    END IF;
+END $EF$;
+COMMIT;

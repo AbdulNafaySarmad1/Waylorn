@@ -184,7 +184,7 @@ public static class FrontendEndpoints
         return (org, sites, zones);
     }
 
-    private static FrontendAssetSummary ToSummary(Asset asset, Organization org, Site site, Zone? zone) => new(
+    internal static FrontendAssetSummary ToSummary(Asset asset, Organization org, Site site, Zone? zone) => new(
         asset.Id, KindName(asset.Kind), asset.Name, $"UNASSIGNED-{asset.Id:N}", asset.Manufacturer, asset.Model,
         new(new(org.Id, org.Slug, org.Name), site.RegionName,
             new(site.Id, site.Code, site.Name, site.Environment),
@@ -207,14 +207,14 @@ public static class FrontendEndpoints
         return false;
     }
 
-    private sealed record OrgRef(Guid Id, string Slug, string Name);
-    private sealed record SiteRef(Guid Id, string Code, string Name, string Environment);
-    private sealed record ZoneRef(Guid Id, string Name);
-    private sealed record AssetContext(OrgRef Organization, string Region, SiteRef Site, ZoneRef? Zone);
-    private sealed record StateView(string State);
+    internal sealed record OrgRef(Guid Id, string Slug, string Name);
+    internal sealed record SiteRef(Guid Id, string Code, string Name, string Environment);
+    internal sealed record ZoneRef(Guid Id, string Name);
+    internal sealed record AssetContext(OrgRef Organization, string Region, SiteRef Site, ZoneRef? Zone);
+    internal sealed record StateView(string State);
     private sealed record HierarchyNodeView(string Id, string Level, string Name, string? Code,
         string? ParentId, int ChildCount, int AssetCount);
-    private sealed record FrontendAssetSummary(Guid Id, string Kind, string Name, string Tag,
+    internal sealed record FrontendAssetSummary(Guid Id, string Kind, string Name, string Tag,
         string? Manufacturer, string? Model, AssetContext Context, string Lifecycle,
         StateView Health, StateView Connectivity, string IdentityConfidence);
 }

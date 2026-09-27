@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Waylorn.ControlPlane.Infrastructure;
@@ -11,9 +12,11 @@ using Waylorn.ControlPlane.Infrastructure;
 namespace Waylorn.ControlPlane.Infrastructure.Migrations
 {
     [DbContext(typeof(WaylornDbContext))]
-    partial class WaylornDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260927200937_LinkWorkflowSites")]
+    partial class LinkWorkflowSites
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -34,7 +34,14 @@ try {
   await page.goto(`${observedUrl}/telemetry`);
   if ((await page.locator('#signal').inputValue()) !== 'modbus.holding.10') throw new Error('Telemetry signal was not loaded.');
   await page.getByText(/Server-aggregated/).first().waitFor();
-  process.stdout.write('Browser integration passed: Keycloak login, PostgreSQL-backed assets, hierarchy, live stream and telemetry history.\n');
+  await page.goto('http://localhost:3000/o/waylorn-local/incidents');
+  const incident = page.locator('tr', { hasText: 'Local smoke incident' }).first();
+  await incident.getByText('Local smoke incident').waitFor();
+  const assetHref = await incident.locator('a[href*="/assets/"]').first().getAttribute('href');
+  if (!assetHref) throw new Error('Incident primary asset link was not rendered.');
+  await page.goto(`http://localhost:3000${assetHref}/maintenance`);
+  await page.getByText('Inspect local simulator asset').first().waitFor();
+  process.stdout.write('Browser integration passed: Keycloak login, inventory, site hierarchy, telemetry, incidents and maintenance.\n');
 } finally {
   await browser.close();
 }

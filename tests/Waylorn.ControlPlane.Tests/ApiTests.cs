@@ -86,6 +86,32 @@ public class ApiTests
         Assert.Single((await (await client.GetAsync("/api/v1/sites")).Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray());
         var first = await CreateAsset(client, site, "PLC-1");
         var second = await CreateAsset(client, site, "Gateway-1");
+        var opened = await client.PostAsJsonAsync("/api/v1/incidents", new
+        {
+            siteId = site, assetIds = new[] { first, second }, title = "Test network interruption",
+            severity = "Critical", owner = "shift-lead"
+        });
+        Assert.Equal(HttpStatusCode.Created, opened.StatusCode);
+        var incidentId = (await opened.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var webIncidents = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/incidents?status=open");
+        Assert.Equal(2, webIncidents.GetProperty("items")[0].GetProperty("assetCount").GetInt32());
+        Assert.Equal("critical", webIncidents.GetProperty("items")[0].GetProperty("severity").GetString());
+        Assert.Equal(first, webIncidents.GetProperty("items")[0].GetProperty("primaryAsset").GetProperty("id").GetGuid());
+        Assert.Equal(HttpStatusCode.OK, (await client.PatchAsJsonAsync($"/api/v1/incidents/{incidentId}",
+            new { state = "Acknowledged", version = 1 })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PatchAsJsonAsync($"/api/v1/incidents/{incidentId}",
+            new { state = "Resolved", version = 2 })).StatusCode);
+        var workOrder = await client.PostAsJsonAsync("/api/v1/work-orders", new
+        {
+            assetId = first, title = "Inspect fieldbus", type = "Inspection",
+            dueUtc = DateTimeOffset.UtcNow.AddDays(1)
+        });
+        Assert.Equal(HttpStatusCode.Created, workOrder.StatusCode);
+        var orderId = (await workOrder.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.OK, (await client.PatchAsJsonAsync($"/api/v1/work-orders/{orderId}",
+            new { state = "Scheduled", version = 1 })).StatusCode);
+        var maintenance = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/assets/{first}/maintenance");
+        Assert.Equal("scheduled", maintenance.GetProperty("items")[0].GetProperty("status").GetString());
         var observed = DateTimeOffset.UtcNow.AddSeconds(-2);
         var observation = new { schemaVersion = 1, requestId = Guid.NewGuid(), siteId = site, assetId = first,
             source = "site-agent/modbus-tcp", observedUtc = observed, expectedIntervalMs = 1000,
@@ -168,6 +194,10 @@ public class ApiTests
 
         SetIdentity(client, org, site, "Approver", "admin");
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/v0/orgs/{org}/assets?siteId={site}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/v1/incidents", new
+        {
+            siteId = site, assetIds = new[] { first }, title = "Unauthorized", severity = "Warning"
+        })).StatusCode);
         var selfApproval = await client.PostAsync($"/api/v1/commands/{commandId}/approve", null);
         Assert.Equal(HttpStatusCode.Conflict, selfApproval.StatusCode);
         Assert.Equal("application/problem+json", selfApproval.Content.Headers.ContentType?.MediaType);
@@ -186,10 +216,11 @@ public class ApiTests
         Assert.Equal(0, await db.Commands.CountAsync());
         var options = new DbContextOptionsBuilder<WaylornDbContext>().UseSqlite(sqlite).Options;
         await using var ownerDb = new WaylornDbContext(options, new TenantScope(org));
-        Assert.Equal(12, await ownerDb.Audit.CountAsync());
+        Assert.Equal(17, await ownerDb.Audit.CountAsync());
         Assert.Single(await ownerDb.Commands.ToListAsync());
-        Assert.Equal(12, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Audit));
+        Assert.Equal(17, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Audit));
         Assert.Equal(2, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Control));
+        Assert.Equal(4, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Operations));
         var eventPayload = JsonDocument.Parse((await ownerDb.Outbox.FirstAsync()).Payload);
         Assert.Equal(1, eventPayload.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.Equal(org, eventPayload.RootElement.GetProperty("organizationId").GetGuid());

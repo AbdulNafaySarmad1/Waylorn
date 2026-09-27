@@ -121,4 +121,28 @@ if (($nextAudit.Content | ConvertFrom-Json).items[0].id -eq $firstAudit.items[0]
 $deniedAudit = Send-Json 'GET' "/api/v1/audit?siteId=$site" $approver $null
 if ($deniedAudit.StatusCode -ne 403) { throw "Approver audit query returned $($deniedAudit.StatusCode)." }
 
-Write-Output 'Live Keycloak + PostgreSQL smoke passed: readiness, JWT, asset CRUD, role denial, AMBER approval, RED denial, audit pagination.'
+$incident = Send-Json 'POST' '/api/v1/incidents' $admin @{
+    siteId = $site; assetIds = @($assetId); title = 'Local smoke incident'; severity = 'Notice'
+}
+if ($incident.StatusCode -ne 201) { throw "Incident creation returned $($incident.StatusCode): $($incident.Content)" }
+$incidentId = ($incident.Content | ConvertFrom-Json).id
+$incidentPage = Send-Json 'GET' "/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/incidents?status=open" $admin $null
+$incidentItems = ($incidentPage.Content | ConvertFrom-Json).items
+if ($incidentPage.StatusCode -ne 200 -or -not @($incidentItems | Where-Object { $_.id -eq $incidentId }).Count) {
+    throw 'Incident frontend list failed.'
+}
+$acknowledged = Send-Json 'PATCH' "/api/v1/incidents/$incidentId" $admin @{ state = 'Acknowledged'; version = 1 }
+if ($acknowledged.StatusCode -ne 200) { throw "Incident transition returned $($acknowledged.StatusCode)." }
+$order = Send-Json 'POST' '/api/v1/work-orders' $admin @{
+    assetId = $assetId; title = 'Inspect local simulator asset'; type = 'Inspection'
+}
+if ($order.StatusCode -ne 201) { throw "Work-order creation returned $($order.StatusCode)." }
+$orderId = ($order.Content | ConvertFrom-Json).id
+$scheduled = Send-Json 'PATCH' "/api/v1/work-orders/$orderId" $admin @{ state = 'Scheduled'; version = 1 }
+if ($scheduled.StatusCode -ne 200) { throw "Work-order transition returned $($scheduled.StatusCode)." }
+$maintenance = Send-Json 'GET' "/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/assets/$assetId/maintenance" $admin $null
+if ($maintenance.StatusCode -ne 200 -or ($maintenance.Content | ConvertFrom-Json).items[0].status -ne 'scheduled') {
+    throw 'Maintenance frontend list failed.'
+}
+
+Write-Output 'Live Keycloak + PostgreSQL smoke passed: readiness, JWT, inventory, approval, audit, incident and maintenance workflows.'

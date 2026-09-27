@@ -19,6 +19,9 @@ public sealed class WaylornDbContext(DbContextOptions<WaylornDbContext> options,
     public DbSet<CommandRequest> Commands => Set<CommandRequest>();
     public DbSet<AuditRecord> Audit => Set<AuditRecord>();
     public DbSet<TelemetrySample> Telemetry => Set<TelemetrySample>();
+    public DbSet<Incident> Incidents => Set<Incident>();
+    public DbSet<IncidentAsset> IncidentAssets => Set<IncidentAsset>();
+    public DbSet<MaintenanceWorkOrder> WorkOrders => Set<MaintenanceWorkOrder>();
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -126,6 +129,47 @@ public sealed class WaylornDbContext(DbContextOptions<WaylornDbContext> options,
             e.Property(x => x.Source).HasMaxLength(120);
             e.HasIndex(x => new { x.OrganizationId, x.RequestId, x.SignalKey }).IsUnique();
             e.HasIndex(x => new { x.OrganizationId, x.AssetId, x.SignalKey, x.ObservedUtc });
+            e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
+        });
+        model.Entity<Incident>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasAlternateKey(x => new { x.OrganizationId, x.Id });
+            e.HasOne<Site>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.SiteId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Asset>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.PrimaryAssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.Property(x => x.Title).HasMaxLength(200);
+            e.Property(x => x.Severity).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.State).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.OpenedBy).HasMaxLength(200);
+            e.Property(x => x.Owner).HasMaxLength(200);
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.HasIndex(x => new { x.OrganizationId, x.SiteId, x.OpenedUtc });
+            e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
+        });
+        model.Entity<IncidentAsset>(e =>
+        {
+            e.HasKey(x => new { x.OrganizationId, x.IncidentId, x.AssetId });
+            e.HasOne<Incident>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.IncidentId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Asset>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
+        });
+        model.Entity<MaintenanceWorkOrder>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasOne<Site>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.SiteId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Asset>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.Property(x => x.Title).HasMaxLength(200);
+            e.Property(x => x.Type).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.State).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.CreatedBy).HasMaxLength(200);
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.HasIndex(x => new { x.OrganizationId, x.SiteId, x.AssetId });
             e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
         });
         model.Entity<OutboxMessage>(e =>

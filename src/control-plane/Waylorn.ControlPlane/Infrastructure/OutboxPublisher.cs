@@ -13,13 +13,14 @@ public sealed class OutboxPublisher(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (destination == OutboxDestination.Control)
+        if (destination != OutboxDestination.Audit)
         {
             await using var nats = new NatsClient(new NatsOpts { Url = configuration["Eventing:NatsUrl"]! });
             var jetStream = nats.CreateJetStreamContext();
             if (configuration.GetValue<bool>("Eventing:BootstrapDestinations"))
-                await jetStream.CreateOrUpdateStreamAsync(
-                    new StreamConfig("WAYLORN_CONTROL", ["waylorn.control.v1.>"]), stoppingToken);
+                await jetStream.CreateOrUpdateStreamAsync(destination == OutboxDestination.Control
+                    ? new StreamConfig("WAYLORN_CONTROL", ["waylorn.control.v1.>"])
+                    : new StreamConfig("WAYLORN_OPERATIONS", ["waylorn.operation.v1.>"]), stoppingToken);
             await PollAsync(async (message, ct) =>
             {
                 var headers = new NatsHeaders { ["Nats-Msg-Id"] = message.Id.ToString() };

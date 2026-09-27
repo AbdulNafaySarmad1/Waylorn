@@ -39,7 +39,7 @@ if (eventingEnabled)
     if (string.IsNullOrWhiteSpace(builder.Configuration["Eventing:NatsUrl"]) ||
         string.IsNullOrWhiteSpace(builder.Configuration["Eventing:KafkaBootstrapServers"]))
         throw new InvalidOperationException("NATS and Kafka addresses are required when eventing is enabled.");
-    foreach (var destination in new[] { OutboxDestination.Audit, OutboxDestination.Control })
+    foreach (var destination in new[] { OutboxDestination.Audit, OutboxDestination.Control, OutboxDestination.Operations })
         builder.Services.AddSingleton<IHostedService>(sp => new OutboxPublisher(
             sp.GetRequiredService<IServiceScopeFactory>(), sp.GetRequiredService<IConfiguration>(),
             sp.GetRequiredService<ILogger<OutboxPublisher>>(), destination));
@@ -82,9 +82,13 @@ api.MapAuditEndpoints();
 var frontend = app.MapGroup("/api/v0").RequireAuthorization().RequireRateLimiting("api");
 frontend.MapFrontendEndpoints();
 frontend.MapTelemetryEndpoints();
+frontend.MapIncidentFrontendEndpoints();
+frontend.MapMaintenanceFrontendEndpoints();
 api.MapAssetEndpoints();
 api.MapCommandEndpoints();
 api.MapObservationEndpoints();
+api.MapIncidentEndpoints();
+api.MapMaintenanceEndpoints();
 app.Run();
 
 public partial class Program;
