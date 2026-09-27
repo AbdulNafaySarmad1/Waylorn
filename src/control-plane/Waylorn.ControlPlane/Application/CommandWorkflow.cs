@@ -25,7 +25,7 @@ public sealed class CommandWorkflow(WaylornDbContext db)
         var command = new CommandRequest
         {
             Id = Guid.NewGuid(), OrganizationId = db.OrganizationId, SiteId = asset.SiteId, AssetId = asset.Id,
-            Operation = operation, Risk = CommandPolicy.Classify(operation), State = CommandState.Pending,
+            Operation = operation, Risk = CommandPolicy.Classify(operation, asset.Kind), State = CommandState.Pending,
             Requester = subject, IdempotencyKey = key, ChangeTicket = ticket,
             WindowStartUtc = windowStart, WindowEndUtc = windowEnd, RequestedUtc = DateTimeOffset.UtcNow
         };
@@ -38,10 +38,10 @@ public sealed class CommandWorkflow(WaylornDbContext db)
         return new(RequestStatus.Created, command);
     }
 
-    public async Task<bool> ApproveAsync(CommandRequest command, string approver, bool strongAuthentication, CancellationToken ct)
+    public async Task<bool> ApproveAsync(CommandRequest command, string approver, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
-        if (!CommandPolicy.IsApprovalReady(command, approver, strongAuthentication, now))
+        if (!CommandPolicy.IsApprovalReady(command, approver, now))
         {
             AuditWriter.Add(db, approver, "command.approve", "command", command.Id, command.SiteId, "denied");
             await db.SaveChangesAsync(ct);

@@ -86,6 +86,7 @@ public class ApiTests
         Assert.Single((await (await client.GetAsync("/api/v1/sites")).Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray());
         var first = await CreateAsset(client, site, "PLC-1");
         var second = await CreateAsset(client, site, "Gateway-1");
+        var compute = await CreateAsset(client, site, "Edge-1", "Compute");
         var opened = await client.PostAsJsonAsync("/api/v1/incidents", new
         {
             siteId = site, assetIds = new[] { first, second }, title = "Test network interruption",
@@ -183,13 +184,21 @@ public class ApiTests
 
         var start = DateTimeOffset.UtcNow.AddMinutes(-1);
         var end = DateTimeOffset.UtcNow.AddMinutes(5);
+        client.DefaultRequestHeaders.Add("Idempotency-Key", "red-command-request-001");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/v1/commands",
+            new { assetId = first, operation = "Write", changeTicket = "CHG-RED", windowStartUtc = start, windowEndUtc = end })).StatusCode);
+        client.DefaultRequestHeaders.Remove("Idempotency-Key");
+        client.DefaultRequestHeaders.Add("Idempotency-Key", "industrial-config-001");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/v1/commands",
+            new { assetId = first, operation = "ChangeConfiguration", changeTicket = "CHG-OT", windowStartUtc = start, windowEndUtc = end })).StatusCode);
+        client.DefaultRequestHeaders.Remove("Idempotency-Key");
         client.DefaultRequestHeaders.Add("Idempotency-Key", "command-request-001");
         var requested = await client.PostAsJsonAsync("/api/v1/commands",
-            new { assetId = first, operation = "ChangeConfiguration", changeTicket = "CHG-1", windowStartUtc = start, windowEndUtc = end });
+            new { assetId = compute, operation = "ChangeConfiguration", changeTicket = "CHG-1", windowStartUtc = start, windowEndUtc = end });
         Assert.Equal(HttpStatusCode.Created, requested.StatusCode);
         var commandId = (await requested.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         var repeated = await client.PostAsJsonAsync("/api/v1/commands",
-            new { assetId = first, operation = "ChangeConfiguration", changeTicket = "CHG-1", windowStartUtc = start, windowEndUtc = end });
+            new { assetId = compute, operation = "ChangeConfiguration", changeTicket = "CHG-1", windowStartUtc = start, windowEndUtc = end });
         Assert.Equal(HttpStatusCode.OK, repeated.StatusCode);
 
         SetIdentity(client, org, site, "Approver", "admin");
@@ -216,9 +225,9 @@ public class ApiTests
         Assert.Equal(0, await db.Commands.CountAsync());
         var options = new DbContextOptionsBuilder<WaylornDbContext>().UseSqlite(sqlite).Options;
         await using var ownerDb = new WaylornDbContext(options, new TenantScope(org));
-        Assert.Equal(17, await ownerDb.Audit.CountAsync());
+        Assert.Equal(20, await ownerDb.Audit.CountAsync());
         Assert.Single(await ownerDb.Commands.ToListAsync());
-        Assert.Equal(17, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Audit));
+        Assert.Equal(20, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Audit));
         Assert.Equal(2, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Control));
         Assert.Equal(4, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Operations));
         var eventPayload = JsonDocument.Parse((await ownerDb.Outbox.FirstAsync()).Payload);
@@ -226,9 +235,9 @@ public class ApiTests
         Assert.Equal(org, eventPayload.RootElement.GetProperty("organizationId").GetGuid());
     }
 
-    private static async Task<Guid> CreateAsset(HttpClient client, Guid site, string name)
+    private static async Task<Guid> CreateAsset(HttpClient client, Guid site, string name, string kind = "Industrial")
     {
-        var response = await client.PostAsJsonAsync("/api/v1/assets", new { siteId = site, kind = "Industrial", name });
+        var response = await client.PostAsJsonAsync("/api/v1/assets", new { siteId = site, kind, name });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
     }

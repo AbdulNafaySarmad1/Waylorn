@@ -24,7 +24,7 @@ public class ControlPlaneTests
     }
 
     [Fact]
-    public void Red_approval_requires_distinct_human_mfa_ticket_and_current_window()
+    public void Only_amber_requests_can_be_approved_with_distinct_actor_ticket_and_window()
     {
         var now = DateTimeOffset.UtcNow;
         var command = new CommandRequest
@@ -34,11 +34,17 @@ public class ControlPlaneTests
             WindowStartUtc = now.AddMinutes(-1), WindowEndUtc = now.AddMinutes(1)
         };
         Assert.Equal(RiskClass.Red, command.Risk);
-        Assert.False(CommandPolicy.IsApprovalReady(command, "operator", true, now));
-        Assert.False(CommandPolicy.IsApprovalReady(command, "", true, now));
-        Assert.False(CommandPolicy.IsApprovalReady(command, "approver", false, now));
-        Assert.True(CommandPolicy.IsApprovalReady(command, "approver", true, now));
-        Assert.False(CommandPolicy.IsApprovalReady(command, "approver", true, now.AddMinutes(2)));
+        Assert.False(CommandPolicy.IsApprovalReady(command, "approver", now));
+        Assert.Equal(RiskClass.Red, CommandPolicy.Classify(OperationKind.ChangeConfiguration, AssetKind.Industrial));
+        Assert.Equal(RiskClass.Red, CommandPolicy.Classify(OperationKind.ChangeConfiguration, AssetKind.Network));
+        Assert.Equal(RiskClass.Red, CommandPolicy.Classify(OperationKind.ChangeConfiguration, AssetKind.Security));
+        Assert.Equal(RiskClass.Amber, CommandPolicy.Classify(OperationKind.ChangeConfiguration, AssetKind.Compute));
+        command.Operation = OperationKind.ChangeConfiguration;
+        command.Risk = RiskClass.Amber;
+        Assert.False(CommandPolicy.IsApprovalReady(command, "operator", now));
+        Assert.False(CommandPolicy.IsApprovalReady(command, "", now));
+        Assert.True(CommandPolicy.IsApprovalReady(command, "approver", now));
+        Assert.False(CommandPolicy.IsApprovalReady(command, "approver", now.AddMinutes(2)));
         Assert.Equal(3, (int)OperationKind.Read);
         Assert.Equal(7, (int)OperationKind.ChangeConfiguration);
         Assert.Equal(8, (int)OperationKind.Write);

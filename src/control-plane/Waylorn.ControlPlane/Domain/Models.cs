@@ -190,13 +190,17 @@ public static class CommandPolicy
         _ => RiskClass.Green
     };
 
-    public static bool IsApprovalReady(CommandRequest command, string approver, bool strongAuthentication, DateTimeOffset now) =>
+    public static RiskClass Classify(OperationKind operation, AssetKind assetKind) =>
+        operation == OperationKind.ChangeConfiguration &&
+        assetKind is AssetKind.Industrial or AssetKind.Network or AssetKind.Security
+            ? RiskClass.Red : Classify(operation);
+
+    public static bool IsApprovalReady(CommandRequest command, string approver, DateTimeOffset now) =>
         command.State == CommandState.Pending &&
         !string.IsNullOrWhiteSpace(command.Requester) &&
         !string.IsNullOrWhiteSpace(approver) &&
         command.Requester != approver &&
-        command.Risk != RiskClass.Green &&
+        command.Risk == RiskClass.Amber &&
         !string.IsNullOrWhiteSpace(command.ChangeTicket) &&
-        command.WindowStartUtc <= now && now <= command.WindowEndUtc &&
-        (command.Risk != RiskClass.Red || strongAuthentication);
+        command.WindowStartUtc <= now && now <= command.WindowEndUtc;
 }

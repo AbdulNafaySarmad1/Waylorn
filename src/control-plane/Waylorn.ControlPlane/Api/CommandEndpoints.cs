@@ -32,6 +32,12 @@ public static class CommandEndpoints
             string.IsNullOrWhiteSpace(input.ChangeTicket) || input.ChangeTicket.Length > 200 ||
             input.WindowStartUtc is null || input.WindowEndUtc is null || input.WindowEndUtc <= input.WindowStartUtc)
             return Results.BadRequest();
+        if (CommandPolicy.Classify(input.Operation, asset.Kind) != RiskClass.Amber)
+        {
+            AuditWriter.Add(db, AccessPolicy.Subject(http.User), "command.request", "asset", asset.Id, asset.SiteId, "denied");
+            await db.SaveChangesAsync(ct);
+            return Results.Problem(statusCode: 403, detail: "RED operations require a separate site safety case and are unavailable.");
+        }
         var key = http.Request.Headers["Idempotency-Key"].ToString();
         if (key.Length is < 16 or > 128) return Results.BadRequest();
         var ticket = input.ChangeTicket.Trim();
@@ -67,7 +73,7 @@ public static class CommandEndpoints
             return Results.Forbid();
         }
         var approver = AccessPolicy.Subject(http.User);
-        if (!await workflow.ApproveAsync(command, approver, AccessPolicy.HasStrongAuthentication(http.User), ct))
+        if (!await workflow.ApproveAsync(command, approver, ct))
             return Results.Problem(statusCode: 409, detail: "Approval conditions not met.");
         return Results.Ok(command);
     }

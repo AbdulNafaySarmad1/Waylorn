@@ -92,8 +92,11 @@ $approverList = Send-Json 'GET' "/api/v1/assets?siteId=$site" $approver $null
 if ($approverList.StatusCode -ne 403) { throw "Approver asset listing returned $($approverList.StatusCode)." }
 
 $now = [DateTimeOffset]::UtcNow
+$compute = Send-Json 'POST' '/api/v1/assets' $admin @{ siteId = $site; kind = 'Compute'; name = "smoke-edge-$([Guid]::NewGuid())" }
+if ($compute.StatusCode -ne 201) { throw "Compute asset creation returned $($compute.StatusCode)." }
+$computeId = ($compute.Content | ConvertFrom-Json).id
 $request = Send-Json 'POST' '/api/v1/commands' $admin @{
-    assetId = $assetId; operation = 'ChangeConfiguration'; changeTicket = 'SMOKE-1'
+    assetId = $computeId; operation = 'ChangeConfiguration'; changeTicket = 'SMOKE-1'
     windowStartUtc = $now.AddMinutes(-1); windowEndUtc = $now.AddMinutes(5)
 } @{ 'Idempotency-Key' = "smoke-$([Guid]::NewGuid())" }
 if ($request.StatusCode -ne 201) { throw "Command request returned $($request.StatusCode): $($request.Content)" }
@@ -106,10 +109,12 @@ $red = Send-Json 'POST' '/api/v1/commands' $admin @{
     assetId = $assetId; operation = 'Write'; changeTicket = 'SMOKE-RED'
     windowStartUtc = $now.AddMinutes(-1); windowEndUtc = $now.AddMinutes(5)
 } @{ 'Idempotency-Key' = "smoke-$([Guid]::NewGuid())" }
-if ($red.StatusCode -ne 201) { throw "RED request returned $($red.StatusCode)." }
-$redId = ($red.Content | ConvertFrom-Json).id
-$redApproval = Send-Json 'POST' "/api/v1/commands/$redId/approve" $approver $null
-if ($redApproval.StatusCode -ne 409) { throw "RED approval without MFA returned $($redApproval.StatusCode)." }
+if ($red.StatusCode -ne 403) { throw "RED request returned $($red.StatusCode)." }
+$industrialConfig = Send-Json 'POST' '/api/v1/commands' $admin @{
+    assetId = $assetId; operation = 'ChangeConfiguration'; changeTicket = 'SMOKE-OT'
+    windowStartUtc = $now.AddMinutes(-1); windowEndUtc = $now.AddMinutes(5)
+} @{ 'Idempotency-Key' = "smoke-$([Guid]::NewGuid())" }
+if ($industrialConfig.StatusCode -ne 403) { throw "Industrial configuration request returned $($industrialConfig.StatusCode)." }
 
 $auditPage = Send-Json 'GET' "/api/v1/audit?siteId=$site&limit=1" $admin $null
 if ($auditPage.StatusCode -ne 200) { throw "Audit query returned $($auditPage.StatusCode): $($auditPage.Content)" }
