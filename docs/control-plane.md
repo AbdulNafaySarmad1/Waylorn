@@ -4,7 +4,7 @@ Status: development slice, 2026-09-27. This is the primary application backend. 
 
 ## Code ownership
 
-- `Domain`: asset, relationship, command and audit entities; fixed operation risk and approval rules.
+- `Domain`: organization, site, zone, asset, relationship, command and audit entities; fixed operation risk and approval rules.
 - `Application`: command request/approval transaction and audit writer with transactional outbox.
 - `Infrastructure`: EF Core PostgreSQL context, tenant query/write guard, migrations, NATS/Redpanda outbox publishers, and a short-lived Valkey asset cache.
 - `Api`: authenticated ASP.NET Core endpoints and organization/site/role policy checks.
@@ -30,9 +30,12 @@ Set `Cache:Endpoint` to enable Valkey for 30-second asset-detail reads. Authoriz
 
 | Route | Behavior |
 | --- | --- |
+| `GET/POST /api/v1/organization` | Tenant-scoped organization lookup and administrator registration. |
+| `GET/POST /api/v1/sites` | Claim-scoped site listing and administrator registration. |
+| `GET/POST /api/v1/sites/{siteId}/zones` | Site-scoped zone listing and administrator registration. |
 | `GET /api/v1/assets?siteId=` | Up to 500 tenant/site-scoped assets. |
 | `GET /api/v1/assets/{id}` | Tenant/site-scoped asset. |
-| `POST /api/v1/assets` | Administrator creates asset and audit row. |
+| `POST /api/v1/assets` | Administrator creates asset and audit row after site/zone registry validation. |
 | `PUT /api/v1/assets/{id}` | Administrator updates with `version` optimistic concurrency. Site transfer is rejected. |
 | `DELETE /api/v1/assets/{id}?version=` | Soft delete, rejected if referenced by a relation or command. |
 | `POST /api/v1/relationships` | Administrator creates a typed relation between visible assets. |
@@ -42,5 +45,7 @@ Set `Cache:Endpoint` to enable Valkey for 30-second asset-detail reads. Authoriz
 | `POST /api/v1/commands/{id}/approve` | Separate Approver, current window, ticket, MFA for RED; writes audit. No dispatch. |
 
 The HTTP tests use an in-process fake identity service and SQLite to verify CRUD, relationship access, idempotency, approval, audit, readiness, tenant isolation, and optimistic concurrency. The local Compose smoke verified real Keycloak JWT validation, PostgreSQL writes and migration, NATS and Redpanda outbox acknowledgements, NATS outage recovery while Redpanda continued, and Valkey loss with PostgreSQL fallback. This is local development evidence only. Egress policy, AI governance, notification, billing, infrastructure inventory, a Go gateway, a Rust transport bridge, and site hardware validation remain unimplemented. An approval record must never be interpreted as OT authorization or physical execution.
+
+Organizations, sites, and zones are explicit tenant-owned records. New assets require a registered site and any selected zone must belong to it. Existing installations need a site backfill before a future database foreign key can enforce this relationship for historical assets. Keycloak site claims remain the authorization source; adding a site record does not grant access.
 
 The merged frontend's draft `/api/v0` contract remains separate from these `/api/v1` endpoints. Its richer models are not implemented by this service, so the frontend's development fixtures are not evidence of a working backend integration.

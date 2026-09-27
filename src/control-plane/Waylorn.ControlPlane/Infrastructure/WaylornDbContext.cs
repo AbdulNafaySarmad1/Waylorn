@@ -11,6 +11,9 @@ public sealed class TenantScope(Guid organizationId)
 public sealed class WaylornDbContext(DbContextOptions<WaylornDbContext> options, TenantScope scope) : DbContext(options)
 {
     public Guid OrganizationId => scope.OrganizationId;
+    public DbSet<Organization> Organizations => Set<Organization>();
+    public DbSet<Site> Sites => Set<Site>();
+    public DbSet<Zone> Zones => Set<Zone>();
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<AssetRelation> Relationships => Set<AssetRelation>();
     public DbSet<CommandRequest> Commands => Set<CommandRequest>();
@@ -23,11 +26,45 @@ public sealed class WaylornDbContext(DbContextOptions<WaylornDbContext> options,
             if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted &&
                 entry.Entity.OrganizationId != OrganizationId)
                 throw new InvalidOperationException("Cross-tenant write denied.");
+        foreach (var entry in ChangeTracker.Entries<Organization>())
+            if (entry.State is EntityState.Added or EntityState.Modified && entry.Entity.Id != OrganizationId)
+                throw new InvalidOperationException("Organization identity does not match tenant scope.");
         return base.SaveChangesAsync(cancellationToken);
     }
 
     protected override void OnModelCreating(ModelBuilder model)
     {
+        model.Entity<Organization>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Slug).HasMaxLength(80);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.HasIndex(x => x.Slug).IsUnique();
+            e.HasQueryFilter(x => x.Id == OrganizationId);
+        });
+        model.Entity<Site>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasAlternateKey(x => new { x.OrganizationId, x.Id });
+            e.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            e.Property(x => x.Code).HasMaxLength(40);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.RegionName).HasMaxLength(120);
+            e.Property(x => x.Timezone).HasMaxLength(80);
+            e.Property(x => x.Environment).HasMaxLength(20);
+            e.HasIndex(x => new { x.OrganizationId, x.Code }).IsUnique();
+            e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
+        });
+        model.Entity<Zone>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasOne<Site>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.SiteId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.Property(x => x.Code).HasMaxLength(40);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.HasIndex(x => new { x.OrganizationId, x.SiteId, x.Code }).IsUnique();
+            e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
+        });
         model.Entity<Asset>(e =>
         {
             e.HasKey(x => x.Id);

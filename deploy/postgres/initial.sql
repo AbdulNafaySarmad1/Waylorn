@@ -180,3 +180,84 @@ BEGIN
     END IF;
 END $EF$;
 COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927154227_AddTenancy') THEN
+    CREATE TABLE "Organizations" (
+        "Id" uuid NOT NULL,
+        "OrganizationId" uuid NOT NULL,
+        "Slug" character varying(80) NOT NULL,
+        "Name" character varying(200) NOT NULL,
+        "CreatedUtc" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_Organizations" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927154227_AddTenancy') THEN
+    CREATE TABLE "Sites" (
+        "Id" uuid NOT NULL,
+        "OrganizationId" uuid NOT NULL,
+        "Code" character varying(40) NOT NULL,
+        "Name" character varying(200) NOT NULL,
+        "RegionName" character varying(120) NOT NULL,
+        "Timezone" character varying(80) NOT NULL,
+        "Environment" character varying(20) NOT NULL,
+        "CreatedUtc" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_Sites" PRIMARY KEY ("Id"),
+        CONSTRAINT "AK_Sites_OrganizationId_Id" UNIQUE ("OrganizationId", "Id"),
+        CONSTRAINT "FK_Sites_Organizations_OrganizationId" FOREIGN KEY ("OrganizationId") REFERENCES "Organizations" ("Id") ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927154227_AddTenancy') THEN
+    CREATE TABLE "Zones" (
+        "Id" uuid NOT NULL,
+        "OrganizationId" uuid NOT NULL,
+        "SiteId" uuid NOT NULL,
+        "Code" character varying(40) NOT NULL,
+        "Name" character varying(200) NOT NULL,
+        "CreatedUtc" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_Zones" PRIMARY KEY ("Id"),
+        CONSTRAINT "FK_Zones_Sites_OrganizationId_SiteId" FOREIGN KEY ("OrganizationId", "SiteId") REFERENCES "Sites" ("OrganizationId", "Id") ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927154227_AddTenancy') THEN
+    CREATE UNIQUE INDEX "IX_Organizations_Slug" ON "Organizations" ("Slug");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927154227_AddTenancy') THEN
+    CREATE UNIQUE INDEX "IX_Sites_OrganizationId_Code" ON "Sites" ("OrganizationId", "Code");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927154227_AddTenancy') THEN
+    CREATE UNIQUE INDEX "IX_Zones_OrganizationId_SiteId_Code" ON "Zones" ("OrganizationId", "SiteId", "Code");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927154227_AddTenancy') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260927154227_AddTenancy', '10.0.9');
+    END IF;
+END $EF$;
+COMMIT;

@@ -53,6 +53,15 @@ public class ApiTests
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/health/live")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/health/ready")).StatusCode);
         SetIdentity(client, org, site, "Administrator", "admin");
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/api/v1/organization",
+            new { slug = "test-org", name = "Test Organization" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/api/v1/sites",
+            new { id = site, code = "TEST-1", name = "Test Plant", regionName = "Test Region",
+                timezone = "UTC", environment = "lab" })).StatusCode);
+        var zone = Guid.NewGuid();
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/v1/sites/{site}/zones",
+            new { id = zone, code = "ZONE-1", name = "Test Zone" })).StatusCode);
+        Assert.Single((await (await client.GetAsync("/api/v1/sites")).Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray());
         var first = await CreateAsset(client, site, "PLC-1");
         var second = await CreateAsset(client, site, "Gateway-1");
         var disposable = await CreateAsset(client, site, "Temporary");
@@ -99,9 +108,9 @@ public class ApiTests
         Assert.Equal(0, await db.Commands.CountAsync());
         var options = new DbContextOptionsBuilder<WaylornDbContext>().UseSqlite(sqlite).Options;
         await using var ownerDb = new WaylornDbContext(options, new TenantScope(org));
-        Assert.Equal(9, await ownerDb.Audit.CountAsync());
+        Assert.Equal(12, await ownerDb.Audit.CountAsync());
         Assert.Single(await ownerDb.Commands.ToListAsync());
-        Assert.Equal(9, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Audit));
+        Assert.Equal(12, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Audit));
         Assert.Equal(2, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Control));
         var eventPayload = JsonDocument.Parse((await ownerDb.Outbox.FirstAsync()).Payload);
         Assert.Equal(1, eventPayload.RootElement.GetProperty("schemaVersion").GetInt32());

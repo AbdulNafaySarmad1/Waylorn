@@ -25,6 +25,21 @@ $approver = Get-TestToken 'waylorn-approver' $settings.WAYLORN_TEST_APPROVER_PAS
 $site = $settings.WAYLORN_TEST_SITE_ID
 $ready = Invoke-WebRequest -Uri "$Api/health/ready" -SkipHttpErrorCheck
 if ($ready.StatusCode -ne 200) { throw "Readiness returned $($ready.StatusCode)." }
+$organization = Send-Json 'GET' '/api/v1/organization' $admin $null
+if ($organization.StatusCode -eq 404) {
+    $createdOrg = Send-Json 'POST' '/api/v1/organization' $admin @{ slug = 'waylorn-local'; name = 'Waylorn Local Lab' }
+    if ($createdOrg.StatusCode -ne 201) { throw "Organization creation returned $($createdOrg.StatusCode)." }
+} elseif ($organization.StatusCode -ne 200) { throw "Organization lookup returned $($organization.StatusCode)." }
+$sites = Send-Json 'GET' '/api/v1/sites' $admin $null
+if ($sites.StatusCode -ne 200) { throw "Site list returned $($sites.StatusCode)." }
+$existingSite = @($sites.Content | ConvertFrom-Json) | Where-Object { $_.id -eq $site }
+if (-not $existingSite) {
+    $createdSite = Send-Json 'POST' '/api/v1/sites' $admin @{
+        id = $site; code = 'LOCAL-1'; name = 'Local Test Plant'; regionName = 'Local';
+        timezone = 'UTC'; environment = 'lab'
+    }
+    if ($createdSite.StatusCode -ne 201) { throw "Site creation returned $($createdSite.StatusCode): $($createdSite.Content)" }
+}
 $unauthenticated = Invoke-WebRequest -Uri "$Api/api/v1/assets?siteId=$site" -SkipHttpErrorCheck
 if ($unauthenticated.StatusCode -ne 401) { throw "Unauthenticated request returned $($unauthenticated.StatusCode)." }
 

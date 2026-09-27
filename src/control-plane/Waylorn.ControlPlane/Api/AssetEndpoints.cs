@@ -49,6 +49,10 @@ public static class AssetEndpoints
         if (input.SiteId == Guid.Empty || !Valid(input.Name) || !ValidOptional(input.Manufacturer) ||
             !ValidOptional(input.Model) || !ValidOptional(input.Serial) || !ValidOptional(input.Firmware) ||
             !Enum.IsDefined(input.Kind)) return Results.BadRequest();
+        if (!await db.Sites.AnyAsync(x => x.Id == input.SiteId, ct))
+            return Results.Problem(statusCode: 409, detail: "Site must be registered before adding assets.");
+        if (input.ZoneId is { } createZone && !await db.Zones.AnyAsync(x => x.Id == createZone && x.SiteId == input.SiteId, ct))
+            return Results.BadRequest();
         var asset = new Asset
         {
             Id = Guid.NewGuid(), OrganizationId = db.OrganizationId, SiteId = input.SiteId,
@@ -71,6 +75,8 @@ public static class AssetEndpoints
         if (asset.Version != input.Version) return Results.Conflict();
         if (!Valid(input.Name) || !ValidOptional(input.Manufacturer) || !ValidOptional(input.Model) ||
             !ValidOptional(input.Serial) || !ValidOptional(input.Firmware) || !Enum.IsDefined(input.Kind))
+            return Results.BadRequest();
+        if (input.ZoneId is { } updateZone && !await db.Zones.AnyAsync(x => x.Id == updateZone && x.SiteId == asset.SiteId, ct))
             return Results.BadRequest();
         asset.ZoneId = input.ZoneId;
         asset.Kind = input.Kind;

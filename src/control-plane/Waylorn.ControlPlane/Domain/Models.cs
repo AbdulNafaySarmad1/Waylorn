@@ -10,6 +10,37 @@ public enum CommandState { Pending, Approved, Rejected }
 
 public interface ITenantOwned { Guid OrganizationId { get; } }
 
+public sealed class Organization : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public string Slug { get; set; } = "";
+    public string Name { get; set; } = "";
+    public DateTimeOffset CreatedUtc { get; set; }
+}
+
+public sealed class Site : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string RegionName { get; set; } = "";
+    public string Timezone { get; set; } = "UTC";
+    public string Environment { get; set; } = "lab";
+    public DateTimeOffset CreatedUtc { get; set; }
+}
+
+public sealed class Zone : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid SiteId { get; set; }
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
+    public DateTimeOffset CreatedUtc { get; set; }
+}
+
 public sealed class Asset : ITenantOwned
 {
     public Guid Id { get; set; }

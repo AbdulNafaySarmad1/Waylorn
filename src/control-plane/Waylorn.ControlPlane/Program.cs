@@ -74,6 +74,7 @@ app.MapGet("/health/ready", async (WaylornDbContext db, CancellationToken ct) =>
     await db.Database.CanConnectAsync(ct) ? Results.Ok(new { status = "ready" }) : Results.StatusCode(503));
 
 var api = app.MapGroup("/api/v1").RequireAuthorization().RequireRateLimiting("api");
+api.MapTenancyEndpoints();
 api.MapAssetEndpoints();
 api.MapCommandEndpoints();
 app.Run();
