@@ -69,4 +69,4 @@ The HTTP tests use an in-process fake identity service and SQLite to verify CRUD
 
 Organizations, sites, and zones are explicit tenant-owned records. New assets require a registered site and any selected zone must belong to it. Existing installations need a site backfill before a future database foreign key can enforce this relationship for historical assets. Keycloak site claims remain the authorization source; adding a site record does not grant access.
 
-The local browser integration test signs in through Keycloak and verifies the web Assets and Sites pages against the live adapter and PostgreSQL. The rest of the draft `/api/v0` contract remains separate from these implemented routes. Fixture-backed pages are not evidence of live backend integration.
+The local browser integration test signs in through Keycloak and verifies the web Assets, Sites, Live state, and Telemetry pages against the live adapter and PostgreSQL. The rest of the draft `/api/v0` contract remains separate from these implemented routes. Fixture-backed pages are not evidence of live backend integration.

@@ -23,7 +23,18 @@ try {
   await page.getByText('Local Test Plant').first().waitFor();
   await page.locator('summary', { hasText: 'Local Test Plant' }).click();
   await page.getByText('Test Bench').first().waitFor();
-  process.stdout.write('Browser integration passed: Keycloak login, API session, PostgreSQL-backed assets and site hierarchy.\n');
+  await page.goto('http://localhost:3000/o/waylorn-local/assets');
+  const observedAsset = page.locator('tr', { hasText: 'Modbus simulator observation' }).first();
+  await observedAsset.locator('a').first().click();
+  await page.waitForURL(/\/o\/waylorn-local\/assets\/[0-9a-f-]+$/);
+  const observedUrl = page.url();
+  await page.goto(`${observedUrl}/live`);
+  await page.getByText('modbus.holding.10').first().waitFor();
+  await page.getByText('Live stream connected').first().waitFor({ timeout: 15_000 });
+  await page.goto(`${observedUrl}/telemetry`);
+  if ((await page.locator('#signal').inputValue()) !== 'modbus.holding.10') throw new Error('Telemetry signal was not loaded.');
+  await page.getByText(/Server-aggregated/).first().waitFor();
+  process.stdout.write('Browser integration passed: Keycloak login, PostgreSQL-backed assets, hierarchy, live stream and telemetry history.\n');
 } finally {
   await browser.close();
 }
