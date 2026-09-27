@@ -62,3 +62,12 @@ describe('ai policy', () => {
     expect(conflictingCategories(['topology', 'recipes'], ['recipes'])).toEqual(['recipes']);
   });
 });
+
+describe('formatAge', () => {
+  it('treats sub-tick skew as just now', async () => {
+    const { formatAge } = await import('../src/format');
+    const now = Date.parse('2026-09-27T12:00:00Z');
+    expect(formatAge('2026-09-27T12:00:00.800Z', now)).toBe('just now');
+    expect(formatAge('2026-09-27T11:59:50Z', now)).toBe('10 s ago');
+  });
+});

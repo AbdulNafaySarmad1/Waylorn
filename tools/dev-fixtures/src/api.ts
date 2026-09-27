@@ -48,6 +48,7 @@ import {
   iso,
   orgById,
   prng,
+  siteNow,
   type FixtureAsset,
 } from './data.ts';
 import { ACR_MFA, IDP_LABEL, readBody, type AuthenticatedCaller } from './oidc.ts';
@@ -115,6 +116,14 @@ function paginate<T>(items: readonly T[], url: URL): { items: T[]; page: { nextC
   return { items: slice, page: { ...(next ? { nextCursor: next } : {}), totalEstimate: items.length } };
 }
 
+/** Connected sites report continuously; keep their timestamps current instead of frozen at startup. */
+function currentConnectivity(a: FixtureAsset): AssetSummary['connectivity'] {
+  const site = SITES.find((s) => s.id === a.detail.context.site.id);
+  if (site?.connectivity.state !== 'connected') return a.detail.connectivity;
+  const interval = a.role === 'machine' ? 5_000 : 1_000;
+  return { ...a.detail.connectivity, lastSeenAt: new Date(Date.now() - (Date.now() % interval)).toISOString() };
+}
+
 function summary(a: FixtureAsset): AssetSummary {
   const d = a.detail;
   return {
@@ -128,7 +137,7 @@ function summary(a: FixtureAsset): AssetSummary {
     context: d.context,
     lifecycle: d.lifecycle,
     health: d.health,
-    connectivity: d.connectivity,
+    connectivity: currentConnectivity(a),
     identityConfidence: d.identityConfidence,
   };
 }
@@ -200,14 +209,14 @@ route('GET', '/orgs/{orgId}/overview', ({ res, orgId }) => {
       for (const a of assets) health[a.detail.health.state] += 1;
       const incidents = INCIDENTS.filter((i) => i.context.site.id === site.id && i.status !== 'resolved');
       return {
-        site,
+        site: siteNow(site),
         assetHealth: health,
         openIncidents: {
           critical: incidents.filter((i) => i.severity === 'critical').length,
           warning: incidents.filter((i) => i.severity === 'warning').length,
           notice: incidents.filter((i) => i.severity === 'notice' || i.severity === 'info').length,
         },
-        staleAssets: site.connectivity.state === 'connected' ? 0 : assets.length,
+        staleAssets: site.connectivity.state === 'disconnected' ? assets.length : 0,
       };
     }),
   });
@@ -294,7 +303,7 @@ function actionsFor(a: FixtureAsset, caller: AuthenticatedCaller): ActionDefinit
 route('GET', '/orgs/{orgId}/assets/{assetId}', (ctx) => {
   const a = orgAsset(ctx);
   if (!a) return;
-  send(ctx.res, 200, { ...a.detail, permittedActions: actionsFor(a, ctx.caller).map((d) => d.availability) });
+  send(ctx.res, 200, { ...a.detail, connectivity: currentConnectivity(a), permittedActions: actionsFor(a, ctx.caller).map((d) => d.availability) });
 });
 
 route('GET', '/orgs/{orgId}/assets/{assetId}/actions', (ctx) => {
@@ -1006,6 +1015,10 @@ function appendAudit(ctx: Ctx, record: Omit<AuditRecord, 'id' | 'occurredAt' | '
   });
 }
 
+function formatParam(v: unknown): string {
+  return typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean' ? String(v) : '—';
+}
+
 route('POST', '/orgs/{orgId}/commands/preflight', async (ctx) => {
   const body = JSON.parse(await readBody(ctx.req)) as { assetId?: string; action?: string; parameters?: Record<string, unknown>; reason?: string; changeTicket?: string };
   const a = assetById(ctx.orgId, body.assetId ?? '');
@@ -1033,7 +1046,7 @@ route('POST', '/orgs/{orgId}/commands/preflight', async (ctx) => {
   }
   const params: { label: string; value: string; previousValue?: string }[] = def.parameters.map((p) => ({
     label: p.label,
-    value: `${String(body.parameters?.[p.name] ?? '—')}${p.unit ? ` ${p.unit}` : ''}`,
+    value: `${formatParam(body.parameters?.[p.name])}${p.unit ? ` ${p.unit}` : ''}`,
     ...(p.name === 'interval_ms' ? { previousValue: '1000 ms' } : p.name === 'setpoint_bar' ? { previousValue: '150 bar' } : {}),
   }));
   const result: PreflightResult = {

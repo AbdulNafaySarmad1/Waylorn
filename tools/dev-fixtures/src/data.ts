@@ -207,9 +207,14 @@ function build(seed: AssetSeed): FixtureAsset {
     ...(seed.installedYear ? { installedYear: seed.installedYear } : {}),
     context,
     lifecycle: seed.lifecycle ?? 'in_service',
+    // A disconnected site cannot report current health; the last known state is only a reason.
     health: {
-      state: seed.health ?? (siteConnected ? 'ok' : 'unknown'),
-      ...(seed.healthReason ? { reason: seed.healthReason } : {}),
+      state: site?.connectivity.state === 'disconnected' ? 'unknown' : (seed.health ?? 'ok'),
+      ...(site?.connectivity.state === 'disconnected'
+        ? { reason: `Site disconnected; last known state: ${seed.health ?? 'ok'}` }
+        : seed.healthReason
+          ? { reason: seed.healthReason }
+          : {}),
       observedAt: iso(siteConnected ? -5_000 : -42 * MIN),
     },
     connectivity: seed.connectivity ?? {
@@ -528,7 +533,7 @@ function bulk(): AssetSeed[] {
       const health: HealthState = r < 0.02 ? 'fault' : r < 0.08 ? 'warning' : 'ok';
       n += 1;
       const prefix = role === 'plc' ? 'PLC' : role === 'sensor' ? 'TT' : role === 'drive' ? 'DRV' : 'HMI';
-      const tag = `${prefix}-${line.code.slice(-3)}-${String(n).padStart(4, '0')}`;
+      const tag = `${prefix}-${line.code.split('-').at(-1) ?? 'X'}-${String(n).padStart(4, '0')}`;
       out.push({
         id: `ast_b${String(n).padStart(5, '0')}`,
         kind: 'IndustrialAsset',
@@ -883,7 +888,8 @@ function seedAudit(): AuditRecord[] {
   for (let i = 0; i < 480; i += 1) {
     const [action, safetyClass, summary] = actions[Math.floor(rand() * actions.length)]!;
     const actor = people[Math.floor(rand() * people.length)]!;
-    const asset = ASSETS[Math.floor(rand() * 20)]!.detail;
+    const northwind = ASSETS.filter((a) => a.orgId === 'org_northwind');
+    const asset = northwind[Math.floor(rand() * 20)]!.detail;
     const denied = safetyClass !== 'GREEN' ? rand() < 0.85 : rand() < 0.03;
     const at = BASE_TIME - i * 17 * MIN - Math.floor(rand() * 10 * MIN);
     records.push({
@@ -909,5 +915,11 @@ function seedAudit(): AuditRecord[] {
   return records;
 }
 
+/** Site as currently reported: connected sites have a fresh last-contact time. */
+export function siteNow(site: Site): Site {
+  if (site.connectivity.state !== 'connected') return site;
+  return { ...site, connectivity: { ...site.connectivity, lastContactAt: new Date(Date.now() - 3_000).toISOString() } };
+}
+
 export const SITE_LIST = (orgId: string): Site[] =>
-  SITES.filter((s) => s.orgId === orgId).map(({ orgId: _o, zones: _z, ...site }) => site);
+  SITES.filter((s) => s.orgId === orgId).map(({ orgId: _o, zones: _z, ...site }) => siteNow(site));

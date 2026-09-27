@@ -27,7 +27,7 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['*.mjs', '*.js', 'apps/*/*.mjs', 'apps/*/*.js', 'apps/*/*.ts'],
+          allowDefaultProject: ['*.mjs', '*.js', 'apps/*/*.mjs', 'apps/*/*.js'],
         },
         tsconfigRootDir: import.meta.dirname,
       },
@@ -38,6 +38,7 @@ export default tseslint.config(
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
       '@typescript-eslint/no-confusing-void-expression': ['error', { ignoreArrowShorthand: true }],
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' }],
       'no-restricted-syntax': [
         'error',
         {
@@ -64,6 +65,16 @@ export default tseslint.config(
       ...nextPlugin.configs.recommended.rules,
       ...nextPlugin.configs['core-web-vitals'].rules,
       '@next/next/no-html-link-for-pages': 'off',
+      // Scrollable regions must be keyboard-focusable (axe: scrollable-region-focusable).
+      'jsx-a11y/no-noninteractive-tabindex': ['error', { roles: ['tabpanel', 'region'], tags: [] }],
+    },
+  },
+  {
+    // Development fixtures: terse test-data code; correctness rules stay on.
+    files: ['tools/dev-fixtures/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      '@typescript-eslint/no-confusing-void-expression': 'off',
     },
   },
   {

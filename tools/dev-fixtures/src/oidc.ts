@@ -259,7 +259,7 @@ ${wantsMfa ? `<fieldset><legend>Step-up authentication requested (${ACR_MFA})</l
   }
 
   async function verifyAccessToken(token: string) {
-    const { payload } = await jwtVerify(token, async () => publicKey, { issuer, audience: API_AUDIENCE, algorithms: ['RS256'] });
+    const { payload } = await jwtVerify(token, () => publicKey, { issuer, audience: API_AUDIENCE, algorithms: ['RS256'] });
     const user = USERS.find((u) => u.sub === payload.sub);
     if (!user) throw new Error('unknown subject');
     const authTime = typeof payload['auth_time'] === 'number' ? payload['auth_time'] : 0;

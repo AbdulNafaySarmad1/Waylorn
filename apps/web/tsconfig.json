@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "preserve",
+    "allowJs": false,
+    "noPropertyAccessFromIndexSignature": false,
+    "incremental": true,
+    "types": ["node", "@testing-library/jest-dom/vitest"],
+    "plugins": [{ "name": "next" }],
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["next-env.d.ts", "src", "test", "e2e", ".next/types/**/*.ts", "*.ts"],
+  "exclude": ["node_modules"]
+}

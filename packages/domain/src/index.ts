@@ -11,3 +11,4 @@ export * from './status';
 export * from './telemetry';
 export * from './tenancy';
 export * from './topology';
+export * from './live';

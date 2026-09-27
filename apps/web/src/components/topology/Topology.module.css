@@ -1,0 +1,153 @@
+.explorer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  min-height: 560px;
+}
+.compact {
+  min-height: 420px;
+}
+.canvasWrap {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-0);
+  border-right: var(--border-width) solid var(--border-subtle);
+  touch-action: none;
+}
+.svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  cursor: grab;
+  user-select: none;
+}
+.svg:active {
+  cursor: grabbing;
+}
+.laneBand {
+  fill: var(--surface-1);
+}
+.laneBandAlt {
+  fill: var(--surface-2);
+}
+.laneLabel {
+  fill: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.edge {
+  stroke: var(--border-strong);
+  stroke-width: 1.25;
+  fill: none;
+}
+.edgeDiscovered {
+  stroke-dasharray: 4 3;
+}
+.edgeHighlight {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+.edgeDim {
+  opacity: 0.2;
+}
+.node rect {
+  fill: var(--surface-1);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+.node text {
+  fill: var(--text-primary);
+  font-size: 12px;
+}
+.node .role {
+  fill: var(--text-muted);
+  font-size: 10px;
+}
+.node:focus {
+  outline: none;
+}
+.node:focus-visible rect,
+.nodeSelected rect {
+  stroke: var(--focus-ring);
+  stroke-width: 2.5;
+}
+.nodeFocus rect {
+  stroke-width: 2;
+  stroke: var(--text-primary);
+}
+.nodeFault rect {
+  fill: var(--status-fault-bg);
+}
+.nodeWarning rect {
+  fill: var(--status-warning-bg);
+}
+.nodeDim {
+  opacity: 0.3;
+}
+.cluster rect {
+  fill: var(--surface-1);
+  stroke: var(--border-strong);
+  stroke-dasharray: 3 2;
+}
+.cluster text {
+  fill: var(--text-secondary);
+  font-size: 10px;
+}
+.toolbar {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  gap: var(--space-2);
+}
+.message {
+  position: absolute;
+  left: var(--space-4);
+  bottom: var(--space-4);
+  right: var(--space-4);
+}
+.panel {
+  padding: var(--space-5);
+  display: grid;
+  gap: var(--space-5);
+  align-content: start;
+  font-size: var(--text-sm);
+  background: var(--surface-1);
+  overflow-y: auto;
+}
+.panel h3 {
+  font-size: var(--text-md);
+}
+.relList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  border-top: var(--border-width) solid var(--border-subtle);
+}
+@media (max-width: 1100px) {
+  .explorer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .canvasWrap {
+    min-height: 460px;
+    border-right: 0;
+    border-bottom: var(--border-width) solid var(--border-subtle);
+  }
+}

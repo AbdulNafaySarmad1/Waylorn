@@ -57,6 +57,8 @@ export function formatAge(isoTimestamp: string | undefined, nowMs: number): stri
   const t = Date.parse(isoTimestamp);
   if (Number.isNaN(t)) return 'invalid time';
   const diff = nowMs - t;
+  // Sub-tick skew between an event and the page clock is not a future time.
+  if (diff < 0 && diff > -5000) return 'just now';
   if (diff < 0) return formatDuration(diff);
   return `${formatDuration(diff)} ago`;
 }

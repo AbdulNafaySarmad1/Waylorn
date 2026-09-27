@@ -1,0 +1,100 @@
+.wrap {
+  position: relative;
+  padding: var(--space-4) var(--space-5) var(--space-5);
+}
+.svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+  font-size: 11px;
+  font-family: var(--font-sans);
+}
+.svg:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+}
+.grid {
+  stroke: var(--grid-line);
+  stroke-width: 1;
+}
+.axis {
+  stroke: var(--axis-line);
+}
+.tickLabel {
+  fill: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.band {
+  fill: var(--series-1-band);
+}
+.line {
+  fill: none;
+  stroke: var(--series-1);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.gap {
+  fill: url(#gap-hatch);
+  stroke: var(--gap-hatch);
+}
+.gapLabel {
+  fill: var(--text-secondary);
+}
+.crosshair {
+  stroke: var(--text-secondary);
+  stroke-dasharray: 3 3;
+}
+.marker {
+  fill: var(--series-1);
+  stroke: var(--surface-1);
+  stroke-width: 2;
+}
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  min-width: 180px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-1);
+  border: var(--border-width) solid var(--border-strong);
+  box-shadow: var(--overlay-shadow);
+  font-size: var(--text-xs);
+  display: grid;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-3);
+}
+.swatchLine,
+.swatchBand,
+.swatchGap {
+  display: inline-block;
+  width: 18px;
+  vertical-align: middle;
+  margin-right: var(--space-3);
+}
+.swatchLine {
+  height: 2px;
+  background: var(--series-1);
+}
+.swatchBand {
+  height: 10px;
+  background: var(--series-1-band);
+}
+.swatchGap {
+  height: 10px;
+  background: repeating-linear-gradient(45deg, var(--gap-hatch) 0 2px, transparent 2px 5px);
+}
+@media (forced-colors: active) {
+  .line {
+    stroke: CanvasText;
+  }
+  .band {
+    fill: GrayText;
+    opacity: 0.3;
+  }
+}
