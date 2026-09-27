@@ -1,0 +1,14 @@
+.page {
+  max-width: 560px;
+  margin: 10vh auto;
+  padding: var(--space-7);
+  background: var(--surface-1);
+  border: var(--border-width) solid var(--border-subtle);
+}
+.title {
+  font-size: var(--text-xl);
+  margin: 0 0 var(--space-5);
+}
+.links {
+  padding-left: var(--space-6);
+}

@@ -1,0 +1,2265 @@
+openapi: 3.1.0
+info:
+  title: Waylorn control-plane API (DRAFT)
+  version: 0.1.0-draft
+  description: |
+    DRAFT contract proposed by the frontend (ADR 0008). The .NET control plane does not
+    implement it yet. When the backend exists it emits the authoritative document and this
+    file is replaced.
+
+    Invariants encoded here:
+    - Every path is tenant-scoped by organization; the backend verifies the caller's scope.
+    - `permittedActions` fields are usability hints computed by the backend. The backend
+      re-evaluates RBAC + ABAC on every request; clients must not treat hints as authority.
+    - Operational values carry provenance (`observedAt` / `computedAt`, `source`, method or
+      model version). Analytics and ML values are never computed by clients.
+    - Errors use RFC 9457 problem details with a `correlationId`.
+servers:
+  - url: /api/v0
+security:
+  - bearer: []
+tags:
+  - name: identity
+  - name: tenancy
+  - name: assets
+  - name: telemetry
+  - name: reliability
+  - name: ml
+  - name: topology
+  - name: infrastructure
+  - name: incidents
+  - name: commands
+  - name: audit
+  - name: ai
+  - name: domains
+
+paths:
+  /me:
+    get:
+      tags: [identity]
+      operationId: getMe
+      summary: Current principal and organizations the principal may access.
+      responses:
+        '200':
+          description: Principal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Principal' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/overview:
+    get:
+      tags: [tenancy]
+      operationId: getOverview
+      parameters: [{ $ref: '#/components/parameters/OrgId' }]
+      responses:
+        '200':
+          description: Per-site operational summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Overview' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/sites:
+    get:
+      tags: [tenancy]
+      operationId: listSites
+      parameters: [{ $ref: '#/components/parameters/OrgId' }]
+      responses:
+        '200':
+          description: Sites visible to the caller
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Site' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/hierarchy:
+    get:
+      tags: [tenancy]
+      operationId: listHierarchyChildren
+      summary: Children of a hierarchy node (organization → region → site → zone → line).
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - name: parentId
+          in: query
+          description: Omit for top-level regions.
+          schema: { type: string }
+      responses:
+        '200':
+          description: Child nodes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/HierarchyNode' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/assets:
+    get:
+      tags: [assets]
+      operationId: listAssets
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { name: siteId, in: query, schema: { type: string } }
+        - { name: zoneId, in: query, schema: { type: string } }
+        - { name: lineId, in: query, schema: { type: string } }
+        - name: kind
+          in: query
+          schema: { $ref: '#/components/schemas/AssetKind' }
+        - name: health
+          in: query
+          schema: { $ref: '#/components/schemas/HealthState' }
+        - name: lifecycle
+          in: query
+          schema: { $ref: '#/components/schemas/LifecycleState' }
+        - name: q
+          in: query
+          description: Free-text search over name, tag, serial, manufacturer and model.
+          schema: { type: string, maxLength: 200 }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [name, tag, health, lastSeen, installedYear]
+            default: tag
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: One page of assets
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetPage' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/assets/{assetId}:
+    get:
+      tags: [assets]
+      operationId: getAsset
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { $ref: '#/components/parameters/AssetId' }
+      responses:
+        '200':
+          description: Asset detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetDetail' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/assets/{assetId}/live:
+    get:
+      tags: [telemetry]
+      operationId: getLiveSnapshot
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { $ref: '#/components/parameters/AssetId' }
+      responses:
+        '200':
+          description: Latest known value of each live signal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LiveSnapshot' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/assets/{assetId}/live/stream:
+    get:
+      tags: [telemetry]
+      operationId: streamLiveSignals
+      description: |
+        Server-Sent Events. Event `signal` carries a LiveSignal JSON document. Event
+        `heartbeat` carries a LiveHeartbeat. Supports `Last-Event-ID`.
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { $ref: '#/components/parameters/AssetId' }
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                oneOf:
+                  - { $ref: '#/components/schemas/LiveSignal' }
+                  - { $ref: '#/components/schemas/LiveHeartbeat' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/assets/{assetId}/telemetry/signals:
+    get:
+      tags: [telemetry]
+      operationId: listTelemetrySignals
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { $ref: '#/components/parameters/AssetId' }
+      responses:
+        '200':
+          description: Signal definitions for which history exists
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/TelemetrySignalDefinition' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/assets/{assetId}/telemetry/series:
+    get:
+      tags: [telemetry]
+      operationId: getTelemetrySeries
+      description: Server-aggregated history. The server never returns more than `maxPoints` buckets.
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { $ref: '#/components/parameters/AssetId' }
+        - { name: signal, in: query, required: true, schema: { type: string } }
+        - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
+        - name: maxPoints
+          in: query
+          schema: { type: integer, minimum: 10, maximum: 2000, default: 600 }
+      responses:
+        '200':
+          description: Aggregated series
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TelemetrySeries' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/assets/{assetId}/reliability:
+    get:
+      tags: [reliability]
+      operationId: getAssetReliability
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { $ref: '#/components/parameters/AssetId' }
+        - name: period
+          in: query
+          schema: { type: string, enum: [P3M, P1Y, P3Y], default: P1Y }
+      responses:
+        '200':
+          description: Deterministic reliability metrics computed by the analytics plane
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReliabilityReport' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/assets/{assetId}/predictions:
+    get:
+      tags: [ml]
+      operationId: listAssetPredictions
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { $ref: '#/components/parameters/AssetId' }
+      responses:
+        '200':
+          description: Current ML estimates for the asset
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Prediction' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/assets/{assetId}/events:
+    get:
+      tags: [assets]
+      operationId: listAssetEvents
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { $ref: '#/components/parameters/AssetId' }
+        - name: severity
+          in: query
+          schema: { $ref: '#/components/schemas/Severity' }
+        - name: category
+          in: query
+          schema: { $ref: '#/components/schemas/EventCategory' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Events, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetEventPage' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/assets/{assetId}/security:
+    get:
+      tags: [assets]
+      operationId: getAssetSecurity
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { $ref: '#/components/parameters/AssetId' }
+      responses:
+        '200':
+          description: Security posture
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetSecurity' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/assets/{assetId}/configuration:
+    get:
+      tags: [assets]
+      operationId: listConfigurationSnapshots
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { $ref: '#/components/parameters/AssetId' }
+      responses:
+        '200':
+          description: Configuration snapshot metadata. Content remains in the site store.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, storageLocation]
+                properties:
+                  storageLocation:
+                    type: string
+                    description: Where snapshot content is held, e.g. "site-local store, Plant 3".
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ConfigurationSnapshot' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/assets/{assetId}/maintenance:
+    get:
+      tags: [assets]
+      operationId: listMaintenance
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { $ref: '#/components/parameters/AssetId' }
+      responses:
+        '200':
+          description: Work orders from the maintenance system of record
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/WorkOrder' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/assets/{assetId}/actions:
+    get:
+      tags: [commands]
+      operationId: listAssetActions
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { $ref: '#/components/parameters/AssetId' }
+      responses:
+        '200':
+          description: Actions defined for this asset and their availability hints
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ActionDefinition' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/topology/neighborhood:
+    get:
+      tags: [topology]
+      operationId: getTopologyNeighborhood
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { name: focus, in: query, required: true, schema: { type: string } }
+        - name: depth
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 4, default: 2 }
+        - name: relations
+          in: query
+          style: form
+          explode: false
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/RelationType' }
+        - name: nodeLimit
+          in: query
+          schema: { type: integer, minimum: 10, maximum: 300, default: 150 }
+      responses:
+        '200':
+          description: Bounded neighbourhood plus cluster summaries beyond the bound
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TopologyGraph' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/topology/impact:
+    get:
+      tags: [topology]
+      operationId: getImpactAnalysis
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { name: assetId, in: query, required: true, schema: { type: string } }
+        - name: direction
+          in: query
+          required: true
+          schema: { type: string, enum: [upstream, downstream] }
+      responses:
+        '200':
+          description: Assets reachable over dependency relations
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImpactAnalysis' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/infrastructure/hosts:
+    get:
+      tags: [infrastructure]
+      operationId: listHostHealth
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { name: siteId, in: query, schema: { type: string } }
+        - name: platform
+          in: query
+          schema: { $ref: '#/components/schemas/ComputePlatform' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Host health rows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, page]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/HostHealth' }
+                  page: { $ref: '#/components/schemas/PageInfo' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/cloud/costs:
+    get:
+      tags: [infrastructure]
+      operationId: getCloudCosts
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - name: groupBy
+          in: query
+          schema: { type: string, enum: [provider, account, site], default: provider }
+      responses:
+        '200':
+          description: Cost estimates from provider billing connectors
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CostSummary' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/reliability/reviews:
+    get:
+      tags: [reliability]
+      operationId: listAssetReviews
+      parameters: [{ $ref: '#/components/parameters/OrgId' }]
+      responses:
+        '200':
+          description: Periodic asset reviews
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AssetReviewSummary' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/reliability/reviews/{reviewId}:
+    get:
+      tags: [reliability]
+      operationId: getAssetReview
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { name: reviewId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Review with candidate assets
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetReview' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/incidents:
+    get:
+      tags: [incidents]
+      operationId: listIncidents
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/IncidentStatus' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Incidents
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, page]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Incident' }
+                  page: { $ref: '#/components/schemas/PageInfo' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/approvals:
+    get:
+      tags: [commands]
+      operationId: listPendingApprovals
+      parameters: [{ $ref: '#/components/parameters/OrgId' }]
+      responses:
+        '200':
+          description: Commands awaiting approval by the caller
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/CommandRecord' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/commands/preflight:
+    post:
+      tags: [commands]
+      operationId: preflightCommand
+      description: |
+        Evaluates policy for a proposed command without executing it. The result is bound to
+        the caller, target and parameters, and expires.
+      parameters: [{ $ref: '#/components/parameters/OrgId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PreflightRequest' }
+      responses:
+        '200':
+          description: Policy evaluation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PreflightResult' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/commands:
+    post:
+      tags: [commands]
+      operationId: submitCommand
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommandSubmission' }
+      responses:
+        '202':
+          description: Accepted for processing. Not an outcome.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommandRecord' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/commands/{commandId}:
+    get:
+      tags: [commands]
+      operationId: getCommand
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { name: commandId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Command state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommandRecord' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/audit:
+    get:
+      tags: [audit]
+      operationId: searchAudit
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { name: q, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: actor, in: query, schema: { type: string } }
+        - { name: assetId, in: query, schema: { type: string } }
+        - { name: siteId, in: query, schema: { type: string } }
+        - { name: action, in: query, schema: { type: string } }
+        - name: decision
+          in: query
+          schema: { $ref: '#/components/schemas/DecisionOutcome' }
+        - { name: correlationId, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Audit records, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditPage' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/audit/exports:
+    post:
+      tags: [audit]
+      operationId: requestAuditExport
+      parameters: [{ $ref: '#/components/parameters/OrgId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuditExportRequest' }
+      responses:
+        '202':
+          description: Export job created, subject to backend policy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditExportJob' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/ai/providers:
+    get:
+      tags: [ai]
+      operationId: listAiProviders
+      parameters: [{ $ref: '#/components/parameters/OrgId' }]
+      responses:
+        '200':
+          description: Configured model providers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AiProvider' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/ai/policies:
+    get:
+      tags: [ai]
+      operationId: listAiDataPolicies
+      parameters: [{ $ref: '#/components/parameters/OrgId' }]
+      responses:
+        '200':
+          description: Data governance policy per provider
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AiDataPolicy' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/ai/policies/{policyId}:
+    put:
+      tags: [ai]
+      operationId: updateAiDataPolicy
+      description: AMBER administrative change. Backend evaluates policy and may require step-up.
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { name: policyId, in: path, required: true, schema: { type: string } }
+        - name: If-Match
+          in: header
+          required: true
+          description: Current policy version, for optimistic concurrency.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AiDataPolicyUpdate' }
+      responses:
+        '200':
+          description: Updated policy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiDataPolicy' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/ai/egress:
+    get:
+      tags: [ai]
+      operationId: listAiEgress
+      parameters:
+        - { $ref: '#/components/parameters/OrgId' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Record of data sent to model providers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, page]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AiEgressRecord' }
+                  page: { $ref: '#/components/schemas/PageInfo' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/ai/assistant/turns:
+    post:
+      tags: [ai]
+      operationId: createAssistantTurn
+      description: |
+        Sends an operator message to the AI gateway. The gateway answers operational questions
+        only through authorized tools (analytics, asset, event, audit services) and returns the
+        tool results with provenance. No tool can execute commands.
+      parameters: [{ $ref: '#/components/parameters/OrgId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssistantRequest' }
+      responses:
+        '200':
+          description: Assistant response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssistantTurn' }
+        default: { $ref: '#/components/responses/Problem' }
+
+  /orgs/{orgId}/domains:
+    get:
+      tags: [domains]
+      operationId: listDomains
+      parameters: [{ $ref: '#/components/parameters/OrgId' }]
+      responses:
+        '200':
+          description: Domains and provisioning progress
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/CustomDomain' }
+        default: { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    OrgId:
+      name: orgId
+      in: path
+      required: true
+      schema: { type: string }
+    AssetId:
+      name: assetId
+      in: path
+      required: true
+      schema: { type: string }
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque cursor from `page.nextCursor`.
+      schema: { type: string, maxLength: 512 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+
+  responses:
+    Problem:
+      description: RFC 9457 problem details
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, correlationId]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        correlationId: { type: string }
+        code:
+          type: string
+          description: Stable machine-readable reason, e.g. `step_up_required`, `forbidden_scope`.
+        stepUp: { $ref: '#/components/schemas/StepUpRequirement' }
+
+    PageInfo:
+      type: object
+      properties:
+        nextCursor: { type: string }
+        totalEstimate:
+          type: integer
+          description: Approximate count; may be omitted for expensive queries.
+
+    Provenance:
+      type: object
+      required: [source]
+      properties:
+        source:
+          type: string
+          description: System or adapter that produced the value, e.g. `site-agent/opcua`, `analytics/r-reliability`.
+        observedAt: { type: string, format: date-time }
+        computedAt: { type: string, format: date-time }
+
+    SafetyClass:
+      type: string
+      enum: [GREEN, AMBER, RED]
+
+    Environment:
+      type: string
+      enum: [production, staging, lab, development]
+
+    HealthState:
+      type: string
+      enum: [ok, warning, fault, unknown]
+
+    Severity:
+      type: string
+      enum: [info, notice, warning, critical]
+
+    ConnectivityState:
+      type: string
+      enum: [connected, degraded, disconnected, unknown]
+
+    LifecycleState:
+      type: string
+      enum: [planned, commissioning, in_service, maintenance, standby, decommissioned]
+
+    AssetKind:
+      type: string
+      enum: [IndustrialAsset, ComputeAsset, NetworkAsset, CloudResource, StorageAsset, ApplicationAsset, SecurityAsset]
+
+    RelationType:
+      type: string
+      enum: [CONTROLS, CONNECTED_TO, DEPENDS_ON, PROGRAMMED_BY, MONITORED_BY, HOSTED_ON, SENDS_DATA_TO, REPRESENTED_BY, PROTECTED_BY]
+
+    ComputePlatform:
+      type: string
+      enum: [bare_metal, virtual_machine, kubernetes_node, podman_host, cloud_instance]
+
+    InfraProvider:
+      type: string
+      enum: [on_premises, hetzner, aws, azure, gcp, private_cloud, customer_datacenter]
+
+    IdentityProviderRef:
+      type: object
+      required: [id, displayName, protocol]
+      properties:
+        id: { type: string }
+        displayName: { type: string }
+        protocol: { type: string, enum: [oidc, saml, ldap, local] }
+
+    OrganizationRef:
+      type: object
+      required: [id, slug, name]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+
+    Principal:
+      type: object
+      required: [subject, displayName, identityProvider, organizations]
+      properties:
+        subject: { type: string }
+        displayName: { type: string }
+        email: { type: string }
+        identityProvider: { $ref: '#/components/schemas/IdentityProviderRef' }
+        organizations:
+          type: array
+          items:
+            allOf:
+              - { $ref: '#/components/schemas/OrganizationRef' }
+              - type: object
+                required: [roles]
+                properties:
+                  roles:
+                    type: array
+                    description: Role names for display only; authorization is evaluated server-side.
+                    items: { type: string }
+
+    SiteConnectivity:
+      type: object
+      required: [state]
+      properties:
+        state: { $ref: '#/components/schemas/ConnectivityState' }
+        lastContactAt: { type: string, format: date-time }
+
+    Site:
+      type: object
+      required: [id, code, name, regionName, environment, timezone, connectivity]
+      properties:
+        id: { type: string }
+        code: { type: string, description: "Short plant code shown in context bars, e.g. `DE-MUC-P3`." }
+        name: { type: string }
+        regionName: { type: string }
+        environment: { $ref: '#/components/schemas/Environment' }
+        timezone: { type: string, description: "IANA timezone" }
+        connectivity: { $ref: '#/components/schemas/SiteConnectivity' }
+
+    HierarchyNode:
+      type: object
+      required: [id, level, name, childCount]
+      properties:
+        id: { type: string }
+        level: { type: string, enum: [region, site, zone, line] }
+        name: { type: string }
+        code: { type: string }
+        parentId: { type: string }
+        childCount: { type: integer }
+        assetCount: { type: integer }
+
+    TenancyContext:
+      type: object
+      description: Full location of a resource. Rendered on every consequential dialog.
+      required: [organization, site]
+      properties:
+        organization: { $ref: '#/components/schemas/OrganizationRef' }
+        region: { type: string }
+        site:
+          type: object
+          required: [id, code, name, environment]
+          properties:
+            id: { type: string }
+            code: { type: string }
+            name: { type: string }
+            environment: { $ref: '#/components/schemas/Environment' }
+        zone:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string }
+            name: { type: string }
+        line:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string }
+            name: { type: string }
+
+    Overview:
+      type: object
+      required: [generatedAt, sites, pendingApprovals]
+      properties:
+        generatedAt: { type: string, format: date-time }
+        pendingApprovals: { type: integer }
+        sites:
+          type: array
+          items:
+            type: object
+            required: [site, assetHealth, openIncidents, staleAssets]
+            properties:
+              site: { $ref: '#/components/schemas/Site' }
+              assetHealth:
+                type: object
+                required: [ok, warning, fault, unknown]
+                properties:
+                  ok: { type: integer }
+                  warning: { type: integer }
+                  fault: { type: integer }
+                  unknown: { type: integer }
+              openIncidents:
+                type: object
+                required: [critical, warning, notice]
+                properties:
+                  critical: { type: integer }
+                  warning: { type: integer }
+                  notice: { type: integer }
+              staleAssets:
+                type: integer
+                description: Assets whose latest telemetry is older than their stale threshold.
+
+    HealthSummary:
+      type: object
+      required: [state]
+      properties:
+        state: { $ref: '#/components/schemas/HealthState' }
+        reason: { type: string }
+        observedAt: { type: string, format: date-time }
+
+    AssetConnectivity:
+      type: object
+      required: [state]
+      properties:
+        state: { $ref: '#/components/schemas/ConnectivityState' }
+        lastSeenAt: { type: string, format: date-time }
+        path:
+          type: string
+          description: Human-readable collection path, e.g. `Serial RS-232 → Moxa NPort → site agent`.
+
+    AssetSummary:
+      type: object
+      required: [id, kind, name, tag, context, lifecycle, health, connectivity, identityConfidence]
+      properties:
+        id: { type: string, description: "Stable opaque identifier." }
+        kind: { $ref: '#/components/schemas/AssetKind' }
+        name: { type: string }
+        tag: { type: string, description: "Plant tag, e.g. `PLC-203`." }
+        manufacturer: { type: string }
+        model: { type: string }
+        installedYear: { type: integer }
+        context: { $ref: '#/components/schemas/TenancyContext' }
+        lifecycle: { $ref: '#/components/schemas/LifecycleState' }
+        health: { $ref: '#/components/schemas/HealthSummary' }
+        connectivity: { $ref: '#/components/schemas/AssetConnectivity' }
+        identityConfidence:
+          type: string
+          enum: [confirmed, probable, unverified]
+          description: Reconciliation state. Discovered identifiers are claims until confirmed.
+
+    AssetPage:
+      type: object
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AssetSummary' }
+        page: { $ref: '#/components/schemas/PageInfo' }
+        facets:
+          type: object
+          properties:
+            kind:
+              type: array
+              items: { $ref: '#/components/schemas/FacetCount' }
+            health:
+              type: array
+              items: { $ref: '#/components/schemas/FacetCount' }
+
+    FacetCount:
+      type: object
+      required: [value, count]
+      properties:
+        value: { type: string }
+        count: { type: integer }
+
+    ObservedValue:
+      type: object
+      required: [value, provenance]
+      properties:
+        value: { type: string }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+
+    Capability:
+      type: object
+      description: |
+        Capability of an asset, with four independent states. Discovery (`observed`) never
+        implies authorization.
+      required: [operation, label, safetyClass, observed, declared, siteApproved, currentlyAuthorized]
+      properties:
+        operation: { type: string }
+        label: { type: string }
+        safetyClass: { $ref: '#/components/schemas/SafetyClass' }
+        observed: { type: boolean }
+        declared: { type: boolean }
+        siteApproved: { type: boolean }
+        currentlyAuthorized: { type: boolean }
+
+    ProtocolBinding:
+      type: object
+      required: [protocol, role, source]
+      properties:
+        protocol:
+          type: string
+          description: e.g. `OPC UA`, `Modbus RTU`, `S7comm`, `EtherNet/IP`, `BACnet/IP`, `MQTT Sparkplug B`, `Proprietary serial`.
+        version: { type: string }
+        role: { type: string, enum: [server, client, publisher, subscriber, passive] }
+        interfaceId: { type: string }
+        source: { type: string, enum: [observed, declared] }
+
+    AssetInterface:
+      type: object
+      required: [id, medium, label]
+      properties:
+        id: { type: string }
+        medium: { type: string, enum: [ethernet, serial_rs232, serial_rs485, fieldbus, wireless, virtual] }
+        label: { type: string }
+        networkZone: { type: string }
+        addressRef:
+          type: string
+          description: Redacted or tokenised address; raw addresses stay in the site store.
+        gatewayPath:
+          type: array
+          items: { type: string }
+
+    Owner:
+      type: object
+      required: [team]
+      properties:
+        team: { type: string }
+        contact: { type: string }
+
+    VendorAttribute:
+      type: object
+      description: Vendor-specific detail preserved verbatim alongside the common model.
+      required: [namespace, key, label, value]
+      properties:
+        namespace: { type: string, description: "e.g. `siemens.s7`, `rockwell.logix`, `legacy.serial`." }
+        key: { type: string }
+        label: { type: string }
+        value: { type: string }
+        unit: { type: string }
+
+    ExternalReference:
+      type: object
+      required: [system, externalId]
+      properties:
+        system: { type: string, description: "e.g. `SAP PM`, `Maximo`, `ServiceNow CMDB`." }
+        externalId: { type: string }
+        syncedAt: { type: string, format: date-time }
+        href: { type: string }
+
+    IndustrialExtension:
+      type: object
+      required: [kind, controlRole, vendorSupport]
+      properties:
+        kind: { type: string, const: IndustrialAsset }
+        controlRole: { type: string, enum: [plc, hmi, drive, machine, sensor, gateway, robot, safety_controller, other] }
+        vendorSupport: { type: string, enum: [supported, limited, end_of_life, unknown] }
+        programmingEnvironment: { type: string }
+        protocolsSummary: { type: string }
+
+    ComputeExtension:
+      type: object
+      required: [kind, platform, provider]
+      properties:
+        kind: { type: string, const: ComputeAsset }
+        platform: { $ref: '#/components/schemas/ComputePlatform' }
+        provider: { $ref: '#/components/schemas/InfraProvider' }
+        operatingSystem: { type: string }
+        cpuCores: { type: integer }
+        memoryBytes: { type: integer, format: int64 }
+
+    NetworkExtension:
+      type: object
+      required: [kind, role]
+      properties:
+        kind: { type: string, const: NetworkAsset }
+        role: { type: string, enum: [switch, router, firewall, data_diode, wireless_ap, serial_server, other] }
+        portCount: { type: integer }
+        managed: { type: boolean }
+
+    CloudExtension:
+      type: object
+      required: [kind, provider, account, resourceType]
+      properties:
+        kind: { type: string, const: CloudResource }
+        provider: { $ref: '#/components/schemas/InfraProvider' }
+        account: { type: string }
+        region: { type: string }
+        resourceType: { type: string }
+
+    StorageExtension:
+      type: object
+      required: [kind, storageType]
+      properties:
+        kind: { type: string, const: StorageAsset }
+        storageType: { type: string, enum: [block, file, object, database] }
+        capacityBytes: { type: integer, format: int64 }
+        usedBytes: { type: integer, format: int64 }
+        worm: { type: boolean }
+
+    ApplicationExtension:
+      type: object
+      required: [kind, runtime]
+      properties:
+        kind: { type: string, const: ApplicationAsset }
+        runtime: { type: string, enum: [kubernetes, podman, systemd, windows_service, saas, other] }
+        version: { type: string }
+
+    SecurityExtension:
+      type: object
+      required: [kind, function]
+      properties:
+        kind: { type: string, const: SecurityAsset }
+        function: { type: string, enum: [firewall, ids, siem_collector, certificate_authority, jump_host, other] }
+
+    AssetExtension:
+      oneOf:
+        - { $ref: '#/components/schemas/IndustrialExtension' }
+        - { $ref: '#/components/schemas/ComputeExtension' }
+        - { $ref: '#/components/schemas/NetworkExtension' }
+        - { $ref: '#/components/schemas/CloudExtension' }
+        - { $ref: '#/components/schemas/StorageExtension' }
+        - { $ref: '#/components/schemas/ApplicationExtension' }
+        - { $ref: '#/components/schemas/SecurityExtension' }
+      discriminator:
+        propertyName: kind
+        mapping:
+          IndustrialAsset: '#/components/schemas/IndustrialExtension'
+          ComputeAsset: '#/components/schemas/ComputeExtension'
+          NetworkAsset: '#/components/schemas/NetworkExtension'
+          CloudResource: '#/components/schemas/CloudExtension'
+          StorageAsset: '#/components/schemas/StorageExtension'
+          ApplicationAsset: '#/components/schemas/ApplicationExtension'
+          SecurityAsset: '#/components/schemas/SecurityExtension'
+
+    AssetDetail:
+      allOf:
+        - { $ref: '#/components/schemas/AssetSummary' }
+        - type: object
+          required: [extension, capabilities, protocols, interfaces, vendorAttributes, externalReferences, permittedActions]
+          properties:
+            serialNumber: { $ref: '#/components/schemas/ObservedValue' }
+            firmware: { $ref: '#/components/schemas/ObservedValue' }
+            hardwareRevision: { $ref: '#/components/schemas/ObservedValue' }
+            extension: { $ref: '#/components/schemas/AssetExtension' }
+            capabilities:
+              type: array
+              items: { $ref: '#/components/schemas/Capability' }
+            protocols:
+              type: array
+              items: { $ref: '#/components/schemas/ProtocolBinding' }
+            interfaces:
+              type: array
+              items: { $ref: '#/components/schemas/AssetInterface' }
+            vendorAttributes:
+              type: array
+              items: { $ref: '#/components/schemas/VendorAttribute' }
+            externalReferences:
+              type: array
+              items: { $ref: '#/components/schemas/ExternalReference' }
+            businessOwner: { $ref: '#/components/schemas/Owner' }
+            maintenanceOwner: { $ref: '#/components/schemas/Owner' }
+            permittedActions:
+              type: array
+              items: { $ref: '#/components/schemas/ActionAvailability' }
+
+    ActionAvailability:
+      type: object
+      description: Usability hint. Never authoritative.
+      required: [action, available]
+      properties:
+        action: { type: string }
+        available: { type: boolean }
+        reason: { type: string }
+
+    LiveSignal:
+      type: object
+      required: [key, label, value, quality, observedAt, expectedIntervalMs, source]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        unit: { type: string }
+        value:
+          oneOf:
+            - { type: number }
+            - { type: string }
+            - { type: boolean }
+            - { type: 'null' }
+        quality: { type: string, enum: [good, uncertain, bad] }
+        observedAt: { type: string, format: date-time }
+        expectedIntervalMs: { type: integer, minimum: 1 }
+        source: { type: string }
+        limits:
+          type: object
+          properties:
+            lowAlarm: { type: number }
+            lowWarning: { type: number }
+            highWarning: { type: number }
+            highAlarm: { type: number }
+
+    LiveHeartbeat:
+      type: object
+      required: [serverTime]
+      properties:
+        serverTime: { type: string, format: date-time }
+
+    LiveSnapshot:
+      type: object
+      required: [assetId, serverTime, signals]
+      properties:
+        assetId: { type: string }
+        serverTime: { type: string, format: date-time }
+        signals:
+          type: array
+          items: { $ref: '#/components/schemas/LiveSignal' }
+
+    TelemetrySignalDefinition:
+      type: object
+      required: [key, label, retention]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        unit: { type: string }
+        retention: { type: string, description: "ISO 8601 duration of history retained." }
+
+    TelemetryBucket:
+      type: object
+      required: [t, count]
+      properties:
+        t: { type: string, format: date-time }
+        min: { type: number }
+        mean: { type: number }
+        max: { type: number }
+        count: { type: integer }
+
+    TelemetrySeries:
+      type: object
+      required: [signal, label, resolutionSeconds, buckets, gaps, provenance]
+      properties:
+        signal: { type: string }
+        label: { type: string }
+        unit: { type: string }
+        resolutionSeconds: { type: integer }
+        buckets:
+          type: array
+          maxItems: 2000
+          items: { $ref: '#/components/schemas/TelemetryBucket' }
+        gaps:
+          type: array
+          items:
+            type: object
+            required: [from, to, reason]
+            properties:
+              from: { type: string, format: date-time }
+              to: { type: string, format: date-time }
+              reason: { type: string, enum: [no_data, collector_offline, site_disconnected, retention] }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+
+    MethodRef:
+      type: object
+      required: [id, version, description]
+      properties:
+        id: { type: string }
+        version: { type: string }
+        description: { type: string }
+
+    ConfidenceInterval:
+      type: object
+      required: [lower, upper, level]
+      properties:
+        lower: { type: number }
+        upper: { type: number }
+        level: { type: number, description: "e.g. 0.95" }
+
+    ReliabilityMetric:
+      type: object
+      required: [key, label, unit, sampleSize, method, dataCoverage]
+      properties:
+        key:
+          type: string
+          enum: [availability, uptime, downtime, planned_downtime, unplanned_downtime, mtbf, mttr, failure_count, maintenance_count]
+        label: { type: string }
+        value:
+          type: number
+          description: Absent when the analytics plane has insufficient data.
+        unit: { type: string }
+        interval: { $ref: '#/components/schemas/ConfidenceInterval' }
+        sampleSize: { type: integer }
+        method: { $ref: '#/components/schemas/MethodRef' }
+        dataCoverage: { type: number, minimum: 0, maximum: 1 }
+        insufficientDataReason: { type: string }
+
+    HealthDimension:
+      type: object
+      description: Distinct health concepts that must not be merged into one score.
+      required: [dimension, label, status, method]
+      properties:
+        dimension:
+          type: string
+          enum: [controller_health, machine_health, process_efficiency, production_efficiency, energy_efficiency]
+        label: { type: string }
+        value: { type: number }
+        unit: { type: string }
+        status: { type: string, enum: [nominal, watch, degraded, insufficient_data] }
+        method: { $ref: '#/components/schemas/MethodRef' }
+
+    ReliabilityReport:
+      type: object
+      required: [assetId, periodStart, periodEnd, computedAt, metrics, dimensions, trend, provenance]
+      properties:
+        assetId: { type: string }
+        periodStart: { type: string, format: date-time }
+        periodEnd: { type: string, format: date-time }
+        computedAt: { type: string, format: date-time }
+        metrics:
+          type: array
+          items: { $ref: '#/components/schemas/ReliabilityMetric' }
+        dimensions:
+          type: array
+          items: { $ref: '#/components/schemas/HealthDimension' }
+        trend:
+          type: array
+          items:
+            type: object
+            required: [periodStart, failures]
+            properties:
+              periodStart: { type: string, format: date-time }
+              availability: { type: number }
+              failures: { type: integer }
+        cohort:
+          type: object
+          required: [label, memberCount, comparisons]
+          properties:
+            label: { type: string }
+            memberCount: { type: integer }
+            comparisons:
+              type: array
+              items:
+                type: object
+                required: [metricKey, label, unit]
+                properties:
+                  metricKey: { type: string }
+                  label: { type: string }
+                  unit: { type: string }
+                  assetValue: { type: number }
+                  cohortP25: { type: number }
+                  cohortMedian: { type: number }
+                  cohortP75: { type: number }
+        notes:
+          type: array
+          description: Analytic caveats, e.g. "Correlation with ambient temperature; causation not established."
+          items: { type: string }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+
+    ModelRef:
+      type: object
+      required: [name, version]
+      properties:
+        name: { type: string }
+        version: { type: string }
+        trainedAt: { type: string, format: date-time }
+        lineageRef: { type: string }
+
+    Prediction:
+      type: object
+      required: [id, kind, label, summary, model, inferredAt, dataFreshness, contributingSignals, status]
+      properties:
+        id: { type: string }
+        kind:
+          type: string
+          enum: [anomaly, failure_risk, remaining_useful_life, sensor_drift, communication_degradation, energy_anomaly, maintenance_due]
+        label: { type: string }
+        summary: { type: string }
+        estimate:
+          type: object
+          required: [unit]
+          properties:
+            value: { type: number }
+            unit: { type: string }
+            interval: { $ref: '#/components/schemas/ConfidenceInterval' }
+        category:
+          type: string
+          description: Categorical output, e.g. `elevated`, when the model is a classifier.
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        model: { $ref: '#/components/schemas/ModelRef' }
+        inferredAt: { type: string, format: date-time }
+        dataFreshness:
+          type: object
+          required: [latestInputAt, coverage]
+          properties:
+            latestInputAt: { type: string, format: date-time }
+            coverage: { type: number, minimum: 0, maximum: 1 }
+        contributingSignals:
+          type: array
+          items:
+            type: object
+            required: [signal, label, contribution]
+            properties:
+              signal: { type: string }
+              label: { type: string }
+              contribution: { type: number, description: "Relative attribution, 0–1." }
+        status: { type: string, enum: [current, stale, superseded] }
+
+    EventCategory:
+      type: string
+      enum: [alarm, state_change, communication, security, maintenance, configuration]
+
+    AssetEvent:
+      type: object
+      required: [id, occurredAt, receivedAt, severity, category, message, source]
+      properties:
+        id: { type: string }
+        occurredAt: { type: string, format: date-time }
+        receivedAt: { type: string, format: date-time }
+        severity: { $ref: '#/components/schemas/Severity' }
+        category: { $ref: '#/components/schemas/EventCategory' }
+        message: { type: string }
+        source: { type: string }
+        correlationId: { type: string }
+
+    AssetEventPage:
+      type: object
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AssetEvent' }
+        page: { $ref: '#/components/schemas/PageInfo' }
+
+    AssetSecurity:
+      type: object
+      required: [assessedAt, zone, vulnerabilities, exposures, provenance]
+      properties:
+        assessedAt: { type: string, format: date-time }
+        zone: { type: string, description: "IEC 62443 zone name" }
+        targetSecurityLevel: { type: string }
+        vulnerabilities:
+          type: array
+          items:
+            type: object
+            required: [id, title, severity, status, source]
+            properties:
+              id: { type: string, description: "e.g. CVE or vendor advisory ID" }
+              title: { type: string }
+              severity: { $ref: '#/components/schemas/Severity' }
+              cvss: { type: number }
+              status: { type: string, enum: [open, mitigated, accepted, not_applicable] }
+              source: { type: string }
+              compensatingControl: { type: string }
+        exposures:
+          type: array
+          items:
+            type: object
+            required: [conduit, description]
+            properties:
+              conduit: { type: string }
+              description: { type: string }
+        provenance: { $ref: '#/components/schemas/Provenance' }
+
+    ConfigurationSnapshot:
+      type: object
+      required: [id, capturedAt, source, digest, sizeBytes]
+      properties:
+        id: { type: string }
+        capturedAt: { type: string, format: date-time }
+        source: { type: string }
+        digest: { type: string, description: "SHA-256 of snapshot content" }
+        sizeBytes: { type: integer }
+        changeSummary: { type: string }
+        differsFromPrevious: { type: boolean }
+
+    WorkOrder:
+      type: object
+      required: [id, title, type, status, system]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        type: { type: string, enum: [preventive, corrective, inspection, calibration] }
+        status: { type: string, enum: [planned, scheduled, in_progress, completed, cancelled] }
+        dueAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+        system: { type: string, description: "Maintenance system of record" }
+        href: { type: string }
+
+    ActionParameter:
+      type: object
+      required: [name, label, type, required]
+      properties:
+        name: { type: string }
+        label: { type: string }
+        type: { type: string, enum: [number, string, boolean, enum] }
+        unit: { type: string }
+        min: { type: number }
+        max: { type: number }
+        options:
+          type: array
+          items: { type: string }
+        required: { type: boolean }
+
+    ActionDefinition:
+      type: object
+      required: [action, label, description, safetyClass, parameters, availability]
+      properties:
+        action: { type: string }
+        label: { type: string }
+        description: { type: string }
+        safetyClass: { $ref: '#/components/schemas/SafetyClass' }
+        parameters:
+          type: array
+          items: { $ref: '#/components/schemas/ActionParameter' }
+        availability: { $ref: '#/components/schemas/ActionAvailability' }
+
+    StepUpRequirement:
+      type: object
+      required: [required]
+      properties:
+        required: { type: boolean }
+        acr: { type: string }
+        maxAgeSeconds: { type: integer }
+
+    PreflightRequest:
+      type: object
+      required: [assetId, action, parameters, reason]
+      properties:
+        assetId: { type: string }
+        action: { type: string }
+        parameters:
+          type: object
+          additionalProperties:
+            oneOf:
+              - { type: number }
+              - { type: string }
+              - { type: boolean }
+        reason: { type: string, minLength: 10, maxLength: 1000 }
+        changeTicket: { type: string, maxLength: 100 }
+
+    DecisionOutcome:
+      type: string
+      enum: [permit, deny]
+
+    PolicyRef:
+      type: object
+      required: [id, name, version]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        version: { type: string }
+        rule: { type: string }
+
+    ActorRef:
+      type: object
+      required: [subject, displayName, type]
+      properties:
+        subject: { type: string }
+        displayName: { type: string }
+        type: { type: string, enum: [human, service, connector, ai_assistant] }
+        identityProvider: { $ref: '#/components/schemas/IdentityProviderRef' }
+
+    PreflightResult:
+      type: object
+      required: [preflightId, expiresAt, safetyClass, decision, reasons, target, effect, requestedBy, reason, requirements]
+      properties:
+        preflightId: { type: string }
+        expiresAt: { type: string, format: date-time }
+        safetyClass: { $ref: '#/components/schemas/SafetyClass' }
+        decision:
+          type: string
+          enum: [permit, deny, requires_approval]
+        reasons:
+          type: array
+          items:
+            type: object
+            required: [code, message]
+            properties:
+              code: { type: string }
+              message: { type: string }
+        policy: { $ref: '#/components/schemas/PolicyRef' }
+        target: { $ref: '#/components/schemas/AssetSummary' }
+        effect:
+          type: object
+          required: [summary, parameters]
+          properties:
+            summary: { type: string, description: "Plain-language statement of what will happen." }
+            parameters:
+              type: array
+              items:
+                type: object
+                required: [label, value]
+                properties:
+                  label: { type: string }
+                  value: { type: string }
+                  previousValue: { type: string }
+        requestedBy: { $ref: '#/components/schemas/ActorRef' }
+        reason: { type: string }
+        changeTicket: { type: string }
+        requirements:
+          type: object
+          required: [stepUp, changeTicket, secondApprover, typedConfirmation]
+          properties:
+            stepUp: { $ref: '#/components/schemas/StepUpRequirement' }
+            changeTicket: { type: boolean }
+            secondApprover: { type: boolean }
+            typedConfirmation: { type: boolean }
+
+    CommandSubmission:
+      type: object
+      required: [preflightId]
+      properties:
+        preflightId: { type: string }
+        typedConfirmation: { type: string }
+
+    CommandState:
+      type: string
+      enum: [submitted, pending_approval, dispatched, acknowledged, succeeded, failed, rejected, expired, unknown]
+
+    CommandRecord:
+      type: object
+      required: [id, state, safetyClass, action, target, requestedBy, requestedAt, correlationId, updatedAt]
+      properties:
+        id: { type: string }
+        state: { $ref: '#/components/schemas/CommandState' }
+        safetyClass: { $ref: '#/components/schemas/SafetyClass' }
+        action: { type: string }
+        actionLabel: { type: string }
+        target: { $ref: '#/components/schemas/AssetSummary' }
+        requestedBy: { $ref: '#/components/schemas/ActorRef' }
+        requestedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        reason: { type: string }
+        correlationId: { type: string }
+        detail: { type: string }
+
+    Incident:
+      type: object
+      required: [id, title, severity, status, openedAt, context, assetCount]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        severity: { $ref: '#/components/schemas/Severity' }
+        status: { $ref: '#/components/schemas/IncidentStatus' }
+        openedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        context: { $ref: '#/components/schemas/TenancyContext' }
+        assetCount: { type: integer }
+        primaryAsset: { $ref: '#/components/schemas/AssetSummary' }
+        owner: { type: string }
+
+    IncidentStatus:
+      type: string
+      enum: [open, acknowledged, mitigated, resolved]
+
+    HostMetric:
+      type: object
+      required: [observedAt]
+      properties:
+        value: { type: number }
+        observedAt: { type: string, format: date-time }
+
+    HostHealth:
+      type: object
+      description: Each metric is absent when the host does not expose it; absence is not zero.
+      required: [asset, platform, provider, expectedIntervalMs, services]
+      properties:
+        asset: { $ref: '#/components/schemas/AssetSummary' }
+        platform: { $ref: '#/components/schemas/ComputePlatform' }
+        provider: { $ref: '#/components/schemas/InfraProvider' }
+        expectedIntervalMs: { type: integer }
+        cpuUtilization: { $ref: '#/components/schemas/HostMetric' }
+        memoryUtilization: { $ref: '#/components/schemas/HostMetric' }
+        diskUtilization: { $ref: '#/components/schemas/HostMetric' }
+        diskIoUtilization: { $ref: '#/components/schemas/HostMetric' }
+        networkPacketLoss: { $ref: '#/components/schemas/HostMetric' }
+        networkLatencyMs: { $ref: '#/components/schemas/HostMetric' }
+        temperatureC: { $ref: '#/components/schemas/HostMetric' }
+        uptimeSeconds: { $ref: '#/components/schemas/HostMetric' }
+        containers:
+          type: object
+          required: [running, total, observedAt]
+          properties:
+            running: { type: integer }
+            total: { type: integer }
+            observedAt: { type: string, format: date-time }
+        certificateExpiry:
+          type: object
+          required: [subject, notAfter]
+          properties:
+            subject: { type: string }
+            notAfter: { type: string, format: date-time }
+        services:
+          type: array
+          items:
+            type: object
+            required: [name, state]
+            properties:
+              name: { type: string, description: "e.g. NATS, Redpanda, Valkey, PostgreSQL, kubelet, Podman" }
+              state: { $ref: '#/components/schemas/HealthState' }
+              observedAt: { type: string, format: date-time }
+
+    CostSummary:
+      type: object
+      required: [currency, groupBy, rows, notes]
+      properties:
+        currency: { type: string }
+        groupBy: { type: string, enum: [provider, account, site] }
+        rows:
+          type: array
+          items:
+            type: object
+            required: [key, label, sourceUpdatedAt]
+            properties:
+              key: { type: string }
+              label: { type: string }
+              provider: { $ref: '#/components/schemas/InfraProvider' }
+              hourlyEstimate: { type: number }
+              dailyEstimate: { type: number }
+              monthToDate: { type: number }
+              monthlyForecast: { type: number }
+              sourceUpdatedAt: { type: string, format: date-time }
+              basis: { type: string, enum: [provider_billing_api, rate_card_estimate, manual_allocation] }
+        notes:
+          type: array
+          items: { type: string }
+
+    AssetReviewSummary:
+      type: object
+      required: [id, title, periodLabel, status, candidateCount, scope]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        periodLabel: { type: string }
+        status: { type: string, enum: [draft, in_review, approved] }
+        candidateCount: { type: integer }
+        scope: { type: string }
+        dueAt: { type: string, format: date-time }
+
+    AssetReview:
+      allOf:
+        - { $ref: '#/components/schemas/AssetReviewSummary' }
+        - type: object
+          required: [candidates, method, computedAt]
+          properties:
+            computedAt: { type: string, format: date-time }
+            method: { $ref: '#/components/schemas/MethodRef' }
+            candidates:
+              type: array
+              items:
+                type: object
+                required: [asset, trend, recommendation, rationale]
+                properties:
+                  asset: { $ref: '#/components/schemas/AssetSummary' }
+                  ageYears: { type: number }
+                  vendorSupport: { type: string, enum: [supported, limited, end_of_life, unknown] }
+                  availability: { type: number }
+                  mtbfHours: { type: number }
+                  unplannedDowntimeHours: { type: number }
+                  trend: { type: string, enum: [improving, stable, degrading, insufficient_data] }
+                  failureRisk: { $ref: '#/components/schemas/Prediction' }
+                  recommendation:
+                    type: string
+                    enum: [retain, monitor, plan_replacement, replace]
+                    description: Rule-based recommendation from the analytics plane for human review.
+                  rationale:
+                    type: array
+                    items: { type: string }
+
+    AuditRecord:
+      type: object
+      required: [id, occurredAt, actor, organization, action, request, decision, result, correlationId]
+      properties:
+        id: { type: string }
+        occurredAt: { type: string, format: date-time }
+        actor: { $ref: '#/components/schemas/ActorRef' }
+        organization: { $ref: '#/components/schemas/OrganizationRef' }
+        site:
+          type: object
+          required: [id, code]
+          properties:
+            id: { type: string }
+            code: { type: string }
+        asset:
+          type: object
+          required: [id, tag]
+          properties:
+            id: { type: string }
+            tag: { type: string }
+        action: { type: string }
+        safetyClass: { $ref: '#/components/schemas/SafetyClass' }
+        request:
+          type: object
+          required: [summary, digest]
+          properties:
+            summary: { type: string }
+            digest: { type: string, description: "SHA-256 of the canonical request" }
+        decision:
+          type: object
+          required: [outcome]
+          properties:
+            outcome: { $ref: '#/components/schemas/DecisionOutcome' }
+            policy: { $ref: '#/components/schemas/PolicyRef' }
+            reasons:
+              type: array
+              items: { type: string }
+        result:
+          type: object
+          required: [status]
+          properties:
+            status: { type: string, enum: [success, failure, unknown, pending, not_executed] }
+            detail: { type: string }
+        correlationId: { type: string }
+        integrity:
+          type: object
+          required: [state]
+          properties:
+            state: { type: string, enum: [verified, unverified, broken] }
+            chainPosition: { type: integer }
+
+    AuditPage:
+      type: object
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AuditRecord' }
+        page: { $ref: '#/components/schemas/PageInfo' }
+        exportPermitted: { $ref: '#/components/schemas/ActionAvailability' }
+
+    AuditExportRequest:
+      type: object
+      required: [format, filters]
+      properties:
+        format: { type: string, enum: [csv, jsonl] }
+        filters:
+          type: object
+          additionalProperties: { type: string }
+
+    AuditExportJob:
+      type: object
+      required: [id, state]
+      properties:
+        id: { type: string }
+        state: { type: string, enum: [queued, pending_approval, running, ready, denied, failed] }
+        detail: { type: string }
+
+    DataCategory:
+      type: string
+      enum:
+        - asset_inventory
+        - topology
+        - telemetry_aggregates
+        - raw_telemetry
+        - plc_configuration
+        - recipes
+        - security_events
+        - network_details
+        - personal_data
+        - audit_records
+        - maintenance_records
+        - reliability_metrics
+
+    DataClassification:
+      type: string
+      enum: [public, internal, confidential, restricted]
+
+    AiProvider:
+      type: object
+      required: [id, displayName, providerClass, endpoint, model, locality, classificationCeiling, status]
+      properties:
+        id: { type: string }
+        displayName: { type: string }
+        providerClass:
+          type: string
+          enum: [ollama, lm_studio, vllm, llama_cpp, openai_compatible, openai, azure_openai, anthropic, gemini, watsonx, other]
+        endpoint: { type: string }
+        model: { type: string }
+        locality:
+          type: string
+          enum: [on_premises, customer_cloud, external]
+        classificationCeiling: { $ref: '#/components/schemas/DataClassification' }
+        status: { type: string, enum: [enabled, disabled, pending_approval] }
+        lastHealthCheck:
+          type: object
+          required: [at, state]
+          properties:
+            at: { type: string, format: date-time }
+            state: { $ref: '#/components/schemas/HealthState' }
+
+    AiDataPolicyUpdate:
+      type: object
+      required: [allowedCategories, prohibitedCategories, redaction, pseudonymization, aggregation, approval, retention]
+      properties:
+        allowedCategories:
+          type: array
+          items: { $ref: '#/components/schemas/DataCategory' }
+        prohibitedCategories:
+          type: array
+          items: { $ref: '#/components/schemas/DataCategory' }
+        redaction:
+          type: object
+          required: [enabled, fields]
+          properties:
+            enabled: { type: boolean }
+            fields:
+              type: array
+              items: { type: string }
+        pseudonymization:
+          type: object
+          required: [enabled, scopes]
+          properties:
+            enabled: { type: boolean }
+            scopes:
+              type: array
+              items: { type: string, enum: [people, sites, assets, network_addresses] }
+        aggregation:
+          type: object
+          required: [enabled]
+          properties:
+            enabled: { type: boolean }
+            minimumGroupSize: { type: integer, minimum: 2 }
+        approval:
+          type: object
+          required: [required]
+          properties:
+            required: { type: boolean }
+            approverRole: { type: string }
+        retention:
+          type: object
+          required: [localTranscriptDays]
+          properties:
+            localTranscriptDays: { type: integer, minimum: 0 }
+            providerRetention:
+              type: string
+              description: Provider-side retention as contracted, e.g. "zero retention (contract ref …)".
+
+    AiDataPolicy:
+      allOf:
+        - { $ref: '#/components/schemas/AiDataPolicyUpdate' }
+        - type: object
+          required: [id, providerId, version, classification, updatedAt, updatedBy]
+          properties:
+            id: { type: string }
+            providerId: { type: string }
+            version: { type: string }
+            classification: { $ref: '#/components/schemas/DataClassification' }
+            updatedAt: { type: string, format: date-time }
+            updatedBy: { $ref: '#/components/schemas/ActorRef' }
+
+    AiEgressRecord:
+      type: object
+      required: [id, at, providerId, locality, categories, decision, actor]
+      properties:
+        id: { type: string }
+        at: { type: string, format: date-time }
+        providerId: { type: string }
+        locality: { type: string, enum: [on_premises, customer_cloud, external] }
+        categories:
+          type: array
+          items: { $ref: '#/components/schemas/DataCategory' }
+        redactedFieldCount: { type: integer }
+        bytes: { type: integer }
+        decision: { type: string, enum: [allowed, blocked, pending_approval] }
+        actor: { $ref: '#/components/schemas/ActorRef' }
+
+    AssistantRequest:
+      type: object
+      required: [message]
+      properties:
+        conversationId: { type: string }
+        providerId: { type: string }
+        message: { type: string, maxLength: 4000 }
+        contextAssetId: { type: string }
+
+    ProvenanceLink:
+      type: object
+      required: [kind, id, label]
+      properties:
+        kind: { type: string, enum: [asset, event, analytics, audit, incident, telemetry] }
+        id: { type: string }
+        label: { type: string }
+        assetId: { type: string }
+
+    AssistantBlock:
+      oneOf:
+        - type: object
+          required: [type, text]
+          properties:
+            type: { type: string, const: text }
+            text: { type: string }
+        - type: object
+          required: [type, tool, status, summary, provenance]
+          properties:
+            type: { type: string, const: tool_result }
+            tool: { type: string, description: "e.g. `analytics.get_reliability`" }
+            status: { type: string, enum: [ok, denied, error, no_data] }
+            summary: { type: string }
+            provenance:
+              type: array
+              items: { $ref: '#/components/schemas/ProvenanceLink' }
+      discriminator:
+        propertyName: type
+
+    AssistantTurn:
+      type: object
+      required: [conversationId, id, createdAt, blocks, provider, egress]
+      properties:
+        conversationId: { type: string }
+        id: { type: string }
+        createdAt: { type: string, format: date-time }
+        blocks:
+          type: array
+          items: { $ref: '#/components/schemas/AssistantBlock' }
+        provider:
+          type: object
+          required: [id, displayName, model, locality]
+          properties:
+            id: { type: string }
+            displayName: { type: string }
+            model: { type: string }
+            locality: { type: string, enum: [on_premises, customer_cloud, external] }
+        egress:
+          type: object
+          required: [external, categories, redactedFieldCount]
+          properties:
+            external: { type: boolean }
+            categories:
+              type: array
+              items: { $ref: '#/components/schemas/DataCategory' }
+            redactedFieldCount: { type: integer }
+
+    DomainStep:
+      type: object
+      required: [step, state]
+      properties:
+        step:
+          type: string
+          enum: [request, dns_verification, certificate, ingress_binding, idp_redirect, activation]
+        state: { type: string, enum: [pending, in_progress, complete, failed, blocked] }
+        detail: { type: string }
+        updatedAt: { type: string, format: date-time }
+
+    CustomDomain:
+      type: object
+      required: [id, hostname, kind, certificateMode, steps, dnsRecords]
+      properties:
+        id: { type: string }
+        hostname: { type: string }
+        kind: { type: string, enum: [vendor_hosted, custom_domain, custom_subdomain] }
+        certificateMode: { type: string, enum: [managed, customer_provided] }
+        edge: { type: string, description: "e.g. Cloudflare, Akamai, Azure Front Door, customer ingress" }
+        steps:
+          type: array
+          items: { $ref: '#/components/schemas/DomainStep' }
+        dnsRecords:
+          type: array
+          items:
+            type: object
+            required: [type, name, value]
+            properties:
+              type: { type: string }
+              name: { type: string }
+              value: { type: string }
+
+    TopologyNode:
+      type: object
+      required: [id, kind, name, tag, health]
+      properties:
+        id: { type: string }
+        kind: { $ref: '#/components/schemas/AssetKind' }
+        role:
+          type: string
+          description: Finer role for display, e.g. `plc`, `hmi`, `switch`, `edge_server`, `cloud_service`.
+        name: { type: string }
+        tag: { type: string }
+        health: { $ref: '#/components/schemas/HealthState' }
+        siteCode: { type: string }
+        zoneName: { type: string }
+        lineName: { type: string }
+        distance:
+          type: integer
+          description: Hops from the focus node.
+        hiddenNeighborCount:
+          type: integer
+          description: Neighbours beyond the returned bound; expanding the node fetches them.
+
+    TopologyEdge:
+      type: object
+      required: [id, source, target, relation, provenance]
+      properties:
+        id: { type: string }
+        source: { type: string }
+        target: { type: string }
+        relation: { $ref: '#/components/schemas/RelationType' }
+        provenance: { type: string, enum: [discovered, declared, reviewed] }
+
+    TopologyCluster:
+      type: object
+      description: Summary of assets beyond the bound, attached to a visible node.
+      required: [id, label, grouping, memberCount, attachedTo, relation]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        grouping: { type: string, enum: [zone, line, kind, role] }
+        memberCount: { type: integer }
+        attachedTo: { type: string }
+        relation: { $ref: '#/components/schemas/RelationType' }
+        healthCounts:
+          type: object
+          required: [ok, warning, fault, unknown]
+          properties:
+            ok: { type: integer }
+            warning: { type: integer }
+            fault: { type: integer }
+            unknown: { type: integer }
+
+    TopologyGraph:
+      type: object
+      required: [focusId, depth, nodes, edges, clusters, truncated, computedAt]
+      properties:
+        focusId: { type: string }
+        depth: { type: integer }
+        nodes:
+          type: array
+          maxItems: 300
+          items: { $ref: '#/components/schemas/TopologyNode' }
+        edges:
+          type: array
+          items: { $ref: '#/components/schemas/TopologyEdge' }
+        clusters:
+          type: array
+          items: { $ref: '#/components/schemas/TopologyCluster' }
+        truncated: { type: boolean }
+        computedAt: { type: string, format: date-time }
+
+    ImpactAnalysis:
+      type: object
+      required: [rootId, direction, relations, affected, computedAt]
+      properties:
+        rootId: { type: string }
+        direction: { type: string, enum: [upstream, downstream] }
+        relations:
+          type: array
+          description: Relations traversed.
+          items: { $ref: '#/components/schemas/RelationType' }
+        affected:
+          type: array
+          items:
+            type: object
+            required: [node, distance, path]
+            properties:
+              node: { $ref: '#/components/schemas/TopologyNode' }
+              distance: { type: integer }
+              path:
+                type: array
+                description: Edge IDs from the root to this node.
+                items: { type: string }
+        computedAt: { type: string, format: date-time }
+        truncated: { type: boolean }

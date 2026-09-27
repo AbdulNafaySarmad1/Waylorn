@@ -4,6 +4,17 @@
 .idea/
 *.user
 *.log
+node_modules/
+.next/
+out/
+coverage/
+dist/
+.expo/
+playwright-report/
+test-results/
+*.tsbuildinfo
+.env*.local
+apps/web/next-env.d.ts
 **/bin/
 **/obj/
 *.userprefs

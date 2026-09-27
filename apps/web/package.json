@@ -1,0 +1,49 @@
+{
+  "name": "@waylorn/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "typecheck": "next typegen && tsc -p tsconfig.json",
+    "test": "vitest run",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/context-zone": "2.11.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.222.0",
+    "@opentelemetry/instrumentation": "0.222.0",
+    "@opentelemetry/instrumentation-fetch": "0.222.0",
+    "@opentelemetry/resources": "2.11.0",
+    "@opentelemetry/sdk-node": "0.222.0",
+    "@opentelemetry/sdk-trace-web": "2.11.0",
+    "@opentelemetry/semantic-conventions": "1.43.0",
+    "@tanstack/react-virtual": "3.14.13",
+    "@waylorn/contracts": "workspace:*",
+    "@waylorn/design-tokens": "workspace:*",
+    "@waylorn/domain": "workspace:*",
+    "next": "16.3.6",
+    "openid-client": "6.8.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "server-only": "0.0.1"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.63.0",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.7",
+    "@types/node": "22.20.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "axe-core": "4.13.0",
+    "jsdom": "30.1.1",
+    "typescript": "6.0.3",
+    "vitest": "5.0.2"
+  }
+}

@@ -1,0 +1,253 @@
+/*
+ * Waylorn design tokens.
+ * Philosophy (ISA-101 high-performance HMI): normal state is neutral; colour is reserved
+ * for abnormal or consequential state and always paired with a glyph and text label.
+ * Themes: light (day shift, default), dark (control room), high contrast. Each is selected,
+ * not auto-inverted.
+ */
+:root {
+  color-scheme: light;
+  --font-sans: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  --text-xs: 0.75rem;   /* 12px: metadata only */
+  --text-sm: 0.8125rem; /* 13px: dense tables */
+  --text-md: 0.875rem;  /* 14px: body */
+  --text-lg: 1rem;      /* 16px: section headings */
+  --text-xl: 1.25rem;   /* 20px: page title */
+  --leading-tight: 1.25;
+  --leading-normal: 1.45;
+
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-7: 24px;
+  --space-8: 32px;
+
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --border-width: 1px;
+  --focus-width: 2px;
+  --row-height: 32px;
+  --row-height-compact: 28px;
+  --control-height: 30px;
+  --touch-target: 44px;
+  --context-bar-height: 36px;
+  --nav-width: 216px;
+
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+
+  /* Surfaces */
+  --surface-0: #eceeef;   /* app background */
+  --surface-1: #fbfbfb;   /* panels, tables */
+  --surface-2: #f3f4f5;   /* table header, secondary panels */
+  --surface-3: #e3e5e7;   /* hover, selected */
+  --surface-inverse: #1d2125;
+  /* Context bar stays dark in every theme: a bright band would glare in a darkened control room. */
+  --bar-bg: #1d2125;
+  --bar-text: #f5f6f7;
+  --border-subtle: #d6d9dc;
+  --border-strong: #9aa1a8;
+
+  /* Ink */
+  --text-primary: #16191c;
+  --text-secondary: #4a5159;
+  --text-muted: #636a72;
+  --text-inverse: #f5f6f7;
+  --text-link: #1d5fb4;
+
+  --accent: #1d5fb4;
+  --accent-contrast: #ffffff;
+  --focus-ring: #0b57d0;
+
+  /* Status (reserved, never reused for data series). "ok" is deliberately muted. */
+  --status-ok: #3d6b52;
+  --status-ok-bg: #e7efe9;
+  --status-warning: #8a5a00;
+  --status-warning-fill: #f2b01e;
+  --status-warning-bg: #fdf3dc;
+  --status-fault: #b3261e;
+  --status-fault-bg: #fbe7e5;
+  --status-unknown: #5f6368;
+  --status-unknown-bg: #eceeef;
+  --status-info: #1d5fb4;
+  --status-info-bg: #e6eef9;
+
+  /* Safety classes */
+  --safety-green: #2f6b45;
+  --safety-green-bg: #e5f0e8;
+  --safety-amber: #8a5a00;
+  --safety-amber-bg: #fdf1d6;
+  --safety-red: #b3261e;
+  --safety-red-bg: #fbe4e1;
+
+  /* Environment band */
+  --env-production: #b3261e;
+  --env-staging: #8a5a00;
+  --env-lab: #4a3aa7;
+  --env-development: #4a5159;
+
+  /* Data visualisation (series never reuse status hues) */
+  --series-1: #2a78d6;
+  --series-1-band: rgba(42, 120, 214, 0.16);
+  --series-2: #eb6834;
+  --grid-line: #e1e4e7;
+  --axis-line: #9aa1a8;
+  --gap-hatch: #c4c9ce;
+
+  --overlay-shadow: 0 8px 24px rgba(16, 20, 24, 0.24);
+  --scrim: rgba(16, 20, 24, 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme='light']):not([data-theme='contrast'])) {
+    color-scheme: dark;
+    --surface-0: #111416;
+    --surface-1: #1a1e21;
+    --surface-2: #22272b;
+    --surface-3: #2d3338;
+    --surface-inverse: #eceeef;
+    --bar-bg: #07090a;
+    --bar-text: #e8eaec;
+    --border-subtle: #2f363b;
+    --border-strong: #5b646c;
+    --text-primary: #e8eaec;
+    --text-secondary: #b4bbc2;
+    --text-muted: #9aa2aa;
+    --text-inverse: #16191c;
+    --text-link: #7fb0ef;
+    --accent: #5b9be8;
+    --accent-contrast: #0b0d0f;
+    --focus-ring: #8ab8f5;
+    --status-ok: #8fbfa2;
+    --status-ok-bg: #1d2a22;
+    --status-warning: #f2c25c;
+    --status-warning-fill: #d9a02a;
+    --status-warning-bg: #2e2612;
+    --status-fault: #ff8a80;
+    --status-fault-bg: #3a1c1a;
+    --status-unknown: #a6adb4;
+    --status-unknown-bg: #262b2f;
+    --status-info: #8ab8f5;
+    --status-info-bg: #18263a;
+    --safety-green: #8fbfa2;
+    --safety-green-bg: #1d2a22;
+    --safety-amber: #f2c25c;
+    --safety-amber-bg: #2e2612;
+    --safety-red: #ff8a80;
+    --safety-red-bg: #3a1c1a;
+    --env-production: #b3261e;
+    --env-staging: #d9a02a;
+    --env-lab: #5b4ec2;
+    --env-development: #555d66;
+    --series-1: #3987e5;
+    --series-1-band: rgba(57, 135, 229, 0.22);
+    --series-2: #d95926;
+    --grid-line: #2a3035;
+    --axis-line: #5b646c;
+    --gap-hatch: #3a4147;
+    --overlay-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    --scrim: rgba(0, 0, 0, 0.6);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --surface-0: #111416;
+  --surface-1: #1a1e21;
+  --surface-2: #22272b;
+  --surface-3: #2d3338;
+  --surface-inverse: #eceeef;
+  --bar-bg: #07090a;
+  --bar-text: #e8eaec;
+  --border-subtle: #2f363b;
+  --border-strong: #5b646c;
+  --text-primary: #e8eaec;
+  --text-secondary: #b4bbc2;
+  --text-muted: #9aa2aa;
+  --text-inverse: #16191c;
+  --text-link: #7fb0ef;
+  --accent: #5b9be8;
+  --accent-contrast: #0b0d0f;
+  --focus-ring: #8ab8f5;
+  --status-ok: #8fbfa2;
+  --status-ok-bg: #1d2a22;
+  --status-warning: #f2c25c;
+  --status-warning-fill: #d9a02a;
+  --status-warning-bg: #2e2612;
+  --status-fault: #ff8a80;
+  --status-fault-bg: #3a1c1a;
+  --status-unknown: #a6adb4;
+  --status-unknown-bg: #262b2f;
+  --status-info: #8ab8f5;
+  --status-info-bg: #18263a;
+  --safety-green: #8fbfa2;
+  --safety-green-bg: #1d2a22;
+  --safety-amber: #f2c25c;
+  --safety-amber-bg: #2e2612;
+  --safety-red: #ff8a80;
+  --safety-red-bg: #3a1c1a;
+  --env-production: #b3261e;
+  --env-staging: #d9a02a;
+  --env-lab: #5b4ec2;
+  --env-development: #555d66;
+  --series-1: #3987e5;
+  --series-1-band: rgba(57, 135, 229, 0.22);
+  --series-2: #d95926;
+  --grid-line: #2a3035;
+  --axis-line: #5b646c;
+  --gap-hatch: #3a4147;
+  --overlay-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  --scrim: rgba(0, 0, 0, 0.6);
+}
+
+/* High contrast: maximum separation, heavier borders. Also applied for prefers-contrast. */
+:root[data-theme='contrast'] {
+  color-scheme: light;
+  --surface-0: #ffffff;
+  --surface-1: #ffffff;
+  --surface-2: #f0f0f0;
+  --surface-3: #d8d8d8;
+  --bar-bg: #000000;
+  --bar-text: #ffffff;
+  --border-subtle: #000000;
+  --border-strong: #000000;
+  --border-width: 1px;
+  --focus-width: 3px;
+  --text-primary: #000000;
+  --text-secondary: #000000;
+  --text-muted: #1f1f1f;
+  --text-link: #00379e;
+  --accent: #00379e;
+  --focus-ring: #c00000;
+  --status-ok: #0b4d26;
+  --status-warning: #5c3a00;
+  --status-fault: #8b0000;
+  --status-unknown: #000000;
+  --status-info: #00379e;
+  --safety-green: #0b4d26;
+  --safety-amber: #5c3a00;
+  --safety-red: #8b0000;
+  --grid-line: #9a9a9a;
+  --axis-line: #000000;
+}
+
+@media (prefers-contrast: more) {
+  :root:where(:not([data-theme])) {
+    --border-subtle: #5b646c;
+    --text-secondary: #16191c;
+    --text-muted: #2e3338;
+    --focus-width: 3px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+  }
+}
