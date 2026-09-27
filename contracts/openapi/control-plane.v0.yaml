@@ -872,7 +872,7 @@ components:
 
     LifecycleState:
       type: string
-      enum: [planned, commissioning, in_service, maintenance, standby, decommissioned]
+      enum: [unknown, planned, commissioning, in_service, maintenance, standby, decommissioned]
 
     AssetKind:
       type: string
@@ -1043,7 +1043,7 @@ components:
         id: { type: string, description: "Stable opaque identifier." }
         kind: { $ref: '#/components/schemas/AssetKind' }
         name: { type: string }
-        tag: { type: string, description: "Plant tag, e.g. `PLC-203`." }
+        tag: { type: string, description: "Plant tag when known; otherwise a system-generated `UNASSIGNED-{id}` label." }
         manufacturer: { type: string }
         model: { type: string }
         installedYear: { type: integer }
@@ -1246,7 +1246,7 @@ components:
       allOf:
         - { $ref: '#/components/schemas/AssetSummary' }
         - type: object
-          required: [extension, capabilities, protocols, interfaces, vendorAttributes, externalReferences, permittedActions]
+          required: [capabilities, protocols, interfaces, vendorAttributes, externalReferences, permittedActions]
           properties:
             serialNumber: { $ref: '#/components/schemas/ObservedValue' }
             firmware: { $ref: '#/components/schemas/ObservedValue' }

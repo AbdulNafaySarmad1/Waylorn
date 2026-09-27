@@ -2,7 +2,8 @@ import type { AssetExtension } from '@waylorn/contracts';
 import { formatBytes, humanizeToken } from '@waylorn/domain';
 
 /** Kind-specific facts rendered in the common layout. */
-export function extensionFacts(ext: AssetExtension): [string, string][] {
+export function extensionFacts(ext: AssetExtension | undefined): [string, string][] {
+  if (!ext) return [];
   switch (ext.kind) {
     case 'IndustrialAsset':
       return [

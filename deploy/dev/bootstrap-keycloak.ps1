@@ -7,13 +7,13 @@ $settings = @{}
 foreach ($line in Get-Content -LiteralPath $envPath) {
     if ($line -match '^([^#=]+)=(.*)$') { $settings[$matches[1]] = $matches[2] }
 }
-foreach ($key in @('WAYLORN_TEST_ADMIN_PASSWORD', 'WAYLORN_TEST_APPROVER_PASSWORD')) {
+foreach ($key in @('WAYLORN_TEST_ADMIN_PASSWORD', 'WAYLORN_TEST_APPROVER_PASSWORD', 'WAYLORN_WEB_CLIENT_SECRET')) {
     if (-not $settings.ContainsKey($key)) {
         $settings[$key] = [Convert]::ToHexString([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
         Add-Content -LiteralPath $envPath -Value "$key=$($settings[$key])"
     }
 }
-foreach ($key in @('WAYLORN_TEST_ORG_ID', 'WAYLORN_TEST_SITE_ID')) {
+foreach ($key in @('WAYLORN_TEST_ORG_ID', 'WAYLORN_TEST_SITE_ID', 'WAYLORN_TEST_ZONE_ID')) {
     if (-not $settings.ContainsKey($key)) {
         $settings[$key] = [Guid]::NewGuid().ToString()
         Add-Content -LiteralPath $envPath -Value "$key=$($settings[$key])"
@@ -38,16 +38,30 @@ $profile = Invoke-RestMethod -Uri "$BaseUrl/admin/realms/waylorn/users/profile" 
 $profile | Add-Member -NotePropertyName unmanagedAttributePolicy -NotePropertyValue 'ADMIN_EDIT' -Force
 $null = Invoke-RestMethod -Uri "$BaseUrl/admin/realms/waylorn/users/profile" -Method Put -Headers $headers -ContentType 'application/json' -Body ($profile | ConvertTo-Json -Depth 20)
 
+$mappers = @(
+    @{ name = 'waylorn-audience'; protocol = 'openid-connect'; protocolMapper = 'oidc-audience-mapper'; config = @{ 'included.client.audience' = 'waylorn-api'; 'access.token.claim' = 'true'; 'id.token.claim' = 'false' } }
+)
+foreach ($attribute in @('org_id', 'site_id', 'waylorn_role', 'principal_type')) {
+    $mappers += @{ name = "waylorn-$attribute"; protocol = 'openid-connect'; protocolMapper = 'oidc-usermodel-attribute-mapper'; config = @{ 'user.attribute' = $attribute; 'claim.name' = $attribute; 'jsonType.label' = 'String'; 'access.token.claim' = 'true'; 'id.token.claim' = 'false'; 'multivalued' = 'false' } }
+}
+
 $clients = @(Invoke-RestMethod -Uri "$BaseUrl/admin/realms/waylorn/clients?clientId=waylorn-api" -Headers $headers | Where-Object { $_.clientId -eq 'waylorn-api' })
 if ($clients.Count -eq 0) {
-    $mappers = @(
-        @{ name = 'waylorn-audience'; protocol = 'openid-connect'; protocolMapper = 'oidc-audience-mapper'; config = @{ 'included.client.audience' = 'waylorn-api'; 'access.token.claim' = 'true'; 'id.token.claim' = 'false' } }
-    )
-    foreach ($attribute in @('org_id', 'site_id', 'waylorn_role', 'principal_type')) {
-        $mappers += @{ name = "waylorn-$attribute"; protocol = 'openid-connect'; protocolMapper = 'oidc-usermodel-attribute-mapper'; config = @{ 'user.attribute' = $attribute; 'claim.name' = $attribute; 'jsonType.label' = 'String'; 'access.token.claim' = 'true'; 'id.token.claim' = 'false'; 'multivalued' = 'false' } }
-    }
     $client = @{ clientId = 'waylorn-api'; enabled = $true; protocol = 'openid-connect'; publicClient = $true; directAccessGrantsEnabled = $true; standardFlowEnabled = $false; protocolMappers = $mappers } | ConvertTo-Json -Depth 12
     $null = Invoke-RestMethod -Uri "$BaseUrl/admin/realms/waylorn/clients" -Method Post -Headers $headers -ContentType 'application/json' -Body $client
+}
+
+$webClients = @(Invoke-RestMethod -Uri "$BaseUrl/admin/realms/waylorn/clients?clientId=waylorn-web" -Headers $headers | Where-Object { $_.clientId -eq 'waylorn-web' })
+if ($webClients.Count -eq 0) {
+    $webClient = @{
+        clientId = 'waylorn-web'; enabled = $true; protocol = 'openid-connect'
+        publicClient = $false; secret = $settings.WAYLORN_WEB_CLIENT_SECRET
+        directAccessGrantsEnabled = $false; standardFlowEnabled = $true
+        redirectUris = @('http://localhost:3000/auth/callback')
+        webOrigins = @('http://localhost:3000')
+        protocolMappers = $mappers
+    } | ConvertTo-Json -Depth 12
+    $null = Invoke-RestMethod -Uri "$BaseUrl/admin/realms/waylorn/clients" -Method Post -Headers $headers -ContentType 'application/json' -Body $webClient
 }
 
 foreach ($entry in @(
@@ -74,4 +88,14 @@ foreach ($entry in @(
     }
 }
 
-Write-Output "Keycloak realm ready. Test organization: $($settings.WAYLORN_TEST_ORG_ID); site: $($settings.WAYLORN_TEST_SITE_ID)."
+$webEnvPath = Join-Path $PSScriptRoot '../../apps/web/.env.development.local'
+@"
+WAYLORN_PUBLIC_ORIGIN=http://localhost:3000
+WAYLORN_API_BASE_URL=http://127.0.0.1:18081
+WAYLORN_OIDC_ISSUER=http://127.0.0.1:18080/realms/waylorn
+WAYLORN_OIDC_CLIENT_ID=waylorn-web
+WAYLORN_OIDC_CLIENT_SECRET=$($settings.WAYLORN_WEB_CLIENT_SECRET)
+WAYLORN_HSTS_MAX_AGE=0
+"@ | Set-Content -LiteralPath $webEnvPath
+
+Write-Output "Keycloak realm and local web client ready. Test organization: $($settings.WAYLORN_TEST_ORG_ID); site: $($settings.WAYLORN_TEST_SITE_ID)."

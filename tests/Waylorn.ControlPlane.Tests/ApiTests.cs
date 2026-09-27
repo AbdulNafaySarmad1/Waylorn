@@ -64,6 +64,23 @@ public class ApiTests
         Assert.Single((await (await client.GetAsync("/api/v1/sites")).Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray());
         var first = await CreateAsset(client, site, "PLC-1");
         var second = await CreateAsset(client, site, "Gateway-1");
+        var me = await client.GetFromJsonAsync<JsonElement>("/api/v0/me");
+        Assert.Equal(org, me.GetProperty("organizations")[0].GetProperty("id").GetGuid());
+        var webSites = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/sites");
+        Assert.Equal(site, webSites.GetProperty("items")[0].GetProperty("id").GetGuid());
+        var regions = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/hierarchy");
+        var regionId = regions.GetProperty("items")[0].GetProperty("id").GetString();
+        var siteNodes = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/hierarchy?parentId={Uri.EscapeDataString(regionId!)}");
+        Assert.Equal(site, siteNodes.GetProperty("items")[0].GetProperty("id").GetGuid());
+        var zoneNodes = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/hierarchy?parentId={site}");
+        Assert.Equal(zone, zoneNodes.GetProperty("items")[0].GetProperty("id").GetGuid());
+        var webAssets = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/assets?siteId={site}&limit=1");
+        Assert.Single(webAssets.GetProperty("items").EnumerateArray());
+        Assert.Equal("unknown", webAssets.GetProperty("items")[0].GetProperty("lifecycle").GetString());
+        Assert.NotEqual(JsonValueKind.Null, webAssets.GetProperty("page").GetProperty("nextCursor").ValueKind);
+        var webDetail = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/assets/{first}");
+        Assert.Equal(first, webDetail.GetProperty("id").GetGuid());
+        Assert.False(webDetail.TryGetProperty("extension", out _));
         var disposable = await CreateAsset(client, site, "Temporary");
         var updated = await client.PutAsJsonAsync($"/api/v1/assets/{first}",
             new { version = 1, siteId = site, kind = "Industrial", name = "PLC-1-updated" });
@@ -91,6 +108,7 @@ public class ApiTests
         Assert.Equal(HttpStatusCode.OK, repeated.StatusCode);
 
         SetIdentity(client, org, site, "Approver", "admin");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/v0/orgs/{org}/assets?siteId={site}")).StatusCode);
         var selfApproval = await client.PostAsync($"/api/v1/commands/{commandId}/approve", null);
         Assert.Equal(HttpStatusCode.Conflict, selfApproval.StatusCode);
         Assert.Equal("application/problem+json", selfApproval.Content.Headers.ContentType?.MediaType);
@@ -101,6 +119,7 @@ public class ApiTests
 
         SetIdentity(client, Guid.NewGuid(), site, "Administrator", "outsider");
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/assets/{first}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v0/orgs/{org}/assets/{first}")).StatusCode);
 
         using var checkScope = factory.Services.CreateScope();
         var db = checkScope.ServiceProvider.GetRequiredService<WaylornDbContext>();

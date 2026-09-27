@@ -46,8 +46,20 @@ Set `Cache:Endpoint` to enable Valkey for 30-second asset-detail reads. Authoriz
 | `GET /api/v1/audit` | Administrator-only, site-scoped audit rows with optional target filter and stable cursor pagination (up to 100). |
 | `GET /api/v1/audit/{id}` | Administrator-only record lookup with tenant/site enforcement. |
 
+The frontend also uses a read-only `/api/v0` adapter:
+
+| Route | Behavior |
+| --- | --- |
+| `GET /api/v0/me` | Keycloak subject, display identity, and the registered organization. |
+| `GET /api/v0/orgs/{orgId}/sites` | Claim-scoped PostgreSQL sites. Connectivity is `unknown` until a live site agent exists. |
+| `GET /api/v0/orgs/{orgId}/hierarchy` | Region, site, and zone levels with current asset counts. Production lines are not yet modeled. |
+| `GET /api/v0/orgs/{orgId}/assets` | Claim-scoped asset search, supported filters, and offset pagination. Unsupported live-data filters return 501. |
+| `GET /api/v0/orgs/{orgId}/assets/{assetId}` | Claim-scoped detail from current registry fields. Unavailable extension, capabilities, protocols, and actions are omitted or empty. |
+
+Registry assets have no tag, lifecycle, or measured health fields yet. The adapter emits an `UNASSIGNED-{id}` display tag and explicit `unknown` state. It does not infer site connectivity or OT capabilities. Offset pagination is not stable across concurrent inventory changes; use the `/api/v1` audit cursor for stable audit browsing.
+
 The HTTP tests use an in-process fake identity service and SQLite to verify CRUD, relationship access, idempotency, approval, audit, readiness, tenant isolation, and optimistic concurrency. The local Compose smoke verified real Keycloak JWT validation, PostgreSQL writes and migration, NATS and Redpanda outbox acknowledgements, NATS outage recovery while Redpanda continued, and Valkey loss with PostgreSQL fallback. This is local development evidence only. Egress policy, AI governance, notification, billing, infrastructure inventory, a Go gateway, a Rust transport bridge, and site hardware validation remain unimplemented. An approval record must never be interpreted as OT authorization or physical execution.
 
 Organizations, sites, and zones are explicit tenant-owned records. New assets require a registered site and any selected zone must belong to it. Existing installations need a site backfill before a future database foreign key can enforce this relationship for historical assets. Keycloak site claims remain the authorization source; adding a site record does not grant access.
 
-The merged frontend's draft `/api/v0` contract remains separate from these `/api/v1` endpoints. Its richer models are not implemented by this service, so the frontend's development fixtures are not evidence of a working backend integration.
+The local browser integration test signs in through Keycloak and verifies the web Assets and Sites pages against the live adapter and PostgreSQL. The rest of the draft `/api/v0` contract remains separate from these implemented routes. Fixture-backed pages are not evidence of live backend integration.

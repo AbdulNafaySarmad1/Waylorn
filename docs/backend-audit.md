@@ -17,7 +17,7 @@ No control-plane responsibilities are implemented in Rust. The earlier architect
 
 The first .NET slice stores reference assets, relationships, approvals, audits, and broker outbox records in PostgreSQL. It does not command equipment. Rust and .NET share a documented v1 operation contract; a live bridge and compatibility test must precede site use.
 
-The merged web/mobile workspace carries a frontend-proposed `/api/v0` OpenAPI draft at `contracts/openapi/control-plane.v0.yaml`. It includes tenancy hierarchy, telemetry, reliability, incident, governance, and many other response models that the current `/api/v1` .NET API does not serve. The frontend uses development fixtures for those views. A contract reconciliation and real API integration test are required before claiming that the operator console is backed by this control plane.
+The merged web/mobile workspace carries a frontend-proposed `/api/v0` OpenAPI draft at `contracts/openapi/control-plane.v0.yaml`. A read-only adapter now serves identity, sites, region/site/zone hierarchy, and asset list/detail from Keycloak and PostgreSQL. A local browser test verifies Keycloak login and those web pages against the live API. Other `/api/v0` domains, including telemetry, reliability, incidents, and governance, remain unimplemented; development fixtures are still used for those views. The draft contract must not be interpreted as evidence that all routes exist.
 
 ## Non-goals of the first slice
 

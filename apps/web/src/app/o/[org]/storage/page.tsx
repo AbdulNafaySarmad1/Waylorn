@@ -44,7 +44,7 @@ export default async function Storage({ params }: { params: Promise<{ org: strin
                 {details.map((d) => {
                   if (!d.ok) return null;
                   const a = d.data;
-                  const ext = a.extension.kind === 'StorageAsset' ? a.extension : undefined;
+                  const ext = a.extension?.kind === 'StorageAsset' ? a.extension : undefined;
                   return (
                     <tr key={a.id}>
                       <th scope="row" className={tableStyles.primaryCell}>

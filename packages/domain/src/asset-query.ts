@@ -80,6 +80,7 @@ export const ASSET_KIND_LABEL: Readonly<Record<AssetKind, string>> = {
 };
 
 export const LIFECYCLE_LABEL: Readonly<Record<LifecycleState, string>> = {
+  unknown: 'Unverified',
   planned: 'Planned',
   commissioning: 'Commissioning',
   in_service: 'In service',

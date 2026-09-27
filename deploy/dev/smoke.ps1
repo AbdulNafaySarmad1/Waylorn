@@ -40,12 +40,46 @@ if (-not $existingSite) {
     }
     if ($createdSite.StatusCode -ne 201) { throw "Site creation returned $($createdSite.StatusCode): $($createdSite.Content)" }
 }
+$zones = Send-Json 'GET' "/api/v1/sites/$site/zones" $admin $null
+if ($zones.StatusCode -ne 200) { throw "Zone list returned $($zones.StatusCode)." }
+$existingZone = @($zones.Content | ConvertFrom-Json) | Where-Object { $_.id -eq $settings.WAYLORN_TEST_ZONE_ID }
+if (-not $existingZone) {
+    $createdZone = Send-Json 'POST' "/api/v1/sites/$site/zones" $admin @{
+        id = $settings.WAYLORN_TEST_ZONE_ID; code = 'LAB-1'; name = 'Test Bench'
+    }
+    if ($createdZone.StatusCode -ne 201) { throw "Zone creation returned $($createdZone.StatusCode)." }
+}
+$webMe = Send-Json 'GET' '/api/v0/me' $admin $null
+if ($webMe.StatusCode -ne 200 -or ($webMe.Content | ConvertFrom-Json).organizations[0].id -ne $settings.WAYLORN_TEST_ORG_ID) {
+    throw 'Frontend identity contract failed.'
+}
+$webSites = Send-Json 'GET' "/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/sites" $admin $null
+if ($webSites.StatusCode -ne 200 -or -not @(($webSites.Content | ConvertFrom-Json).items | Where-Object { $_.id -eq $site }).Count) {
+    throw 'Frontend site contract failed.'
+}
+$webRegions = Send-Json 'GET' "/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/hierarchy" $admin $null
+if ($webRegions.StatusCode -ne 200) { throw 'Frontend hierarchy root failed.' }
+$regionId = ($webRegions.Content | ConvertFrom-Json).items[0].id
+$webSiteNodes = Send-Json 'GET' "/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/hierarchy?parentId=$([uri]::EscapeDataString($regionId))" $admin $null
+if ($webSiteNodes.StatusCode -ne 200 -or ($webSiteNodes.Content | ConvertFrom-Json).items[0].id -ne $site) {
+    throw 'Frontend hierarchy site level failed.'
+}
 $unauthenticated = Invoke-WebRequest -Uri "$Api/api/v1/assets?siteId=$site" -SkipHttpErrorCheck
 if ($unauthenticated.StatusCode -ne 401) { throw "Unauthenticated request returned $($unauthenticated.StatusCode)." }
 
 $asset = Send-Json 'POST' '/api/v1/assets' $admin @{ siteId = $site; kind = 'Industrial'; name = "smoke-$([Guid]::NewGuid())" }
 if ($asset.StatusCode -ne 201) { throw "Asset creation returned $($asset.StatusCode): $($asset.Content)" }
 $assetId = ($asset.Content | ConvertFrom-Json).id
+$webAssets = Send-Json 'GET' "/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/assets?siteId=$site&limit=1" $admin $null
+if ($webAssets.StatusCode -ne 200 -or ($webAssets.Content | ConvertFrom-Json).items.Count -ne 1) {
+    throw 'Frontend asset-list contract failed.'
+}
+$webAsset = Send-Json 'GET' "/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/assets/$assetId" $admin $null
+if ($webAsset.StatusCode -ne 200 -or ($webAsset.Content | ConvertFrom-Json).lifecycle -ne 'unknown') {
+    throw 'Frontend asset-detail contract failed.'
+}
+$deniedWebAssets = Send-Json 'GET' "/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/assets?siteId=$site" $approver $null
+if ($deniedWebAssets.StatusCode -ne 403) { throw 'Frontend asset-list role enforcement failed.' }
 foreach ($attempt in 1..2) {
     $fetched = Send-Json 'GET' "/api/v1/assets/$assetId" $admin $null
     if ($fetched.StatusCode -ne 200 -or ($fetched.Content | ConvertFrom-Json).id -ne $assetId) {

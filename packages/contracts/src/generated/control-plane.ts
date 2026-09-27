@@ -639,7 +639,7 @@ export interface components {
         /** @enum {string} */
         ConnectivityState: "connected" | "degraded" | "disconnected" | "unknown";
         /** @enum {string} */
-        LifecycleState: "planned" | "commissioning" | "in_service" | "maintenance" | "standby" | "decommissioned";
+        LifecycleState: "unknown" | "planned" | "commissioning" | "in_service" | "maintenance" | "standby" | "decommissioned";
         /** @enum {string} */
         AssetKind: "IndustrialAsset" | "ComputeAsset" | "NetworkAsset" | "CloudResource" | "StorageAsset" | "ApplicationAsset" | "SecurityAsset";
         /** @enum {string} */
@@ -753,7 +753,7 @@ export interface components {
             id: string;
             kind: components["schemas"]["AssetKind"];
             name: string;
-            /** @description Plant tag, e.g. `PLC-203`. */
+            /** @description Plant tag when known; otherwise a system-generated `UNASSIGNED-{id}` label. */
             tag: string;
             manufacturer?: string;
             model?: string;
@@ -924,7 +924,7 @@ export interface components {
             serialNumber?: components["schemas"]["ObservedValue"];
             firmware?: components["schemas"]["ObservedValue"];
             hardwareRevision?: components["schemas"]["ObservedValue"];
-            extension: components["schemas"]["AssetExtension"];
+            extension?: components["schemas"]["AssetExtension"];
             capabilities: components["schemas"]["Capability"][];
             protocols: components["schemas"]["ProtocolBinding"][];
             interfaces: components["schemas"]["AssetInterface"][];
@@ -2655,7 +2655,7 @@ export const environmentValues: ReadonlyArray<FlattenedDeepRequired<components>[
 export const healthStateValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["HealthState"]> = ["ok", "warning", "fault", "unknown"];
 export const severityValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Severity"]> = ["info", "notice", "warning", "critical"];
 export const connectivityStateValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ConnectivityState"]> = ["connected", "degraded", "disconnected", "unknown"];
-export const lifecycleStateValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["LifecycleState"]> = ["planned", "commissioning", "in_service", "maintenance", "standby", "decommissioned"];
+export const lifecycleStateValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["LifecycleState"]> = ["unknown", "planned", "commissioning", "in_service", "maintenance", "standby", "decommissioned"];
 export const assetKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AssetKind"]> = ["IndustrialAsset", "ComputeAsset", "NetworkAsset", "CloudResource", "StorageAsset", "ApplicationAsset", "SecurityAsset"];
 export const relationTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["RelationType"]> = ["CONTROLS", "CONNECTED_TO", "DEPENDS_ON", "PROGRAMMED_BY", "MONITORED_BY", "HOSTED_ON", "SENDS_DATA_TO", "REPRESENTED_BY", "PROTECTED_BY"];
 export const computePlatformValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ComputePlatform"]> = ["bare_metal", "virtual_machine", "kubernetes_node", "podman_host", "cloud_instance"];

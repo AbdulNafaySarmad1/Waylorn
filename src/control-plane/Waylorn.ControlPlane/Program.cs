@@ -53,6 +53,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
 builder.Services.AddAuthorization();
 builder.Services.AddProblemDetails();
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull);
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -76,6 +78,8 @@ app.MapGet("/health/ready", async (WaylornDbContext db, CancellationToken ct) =>
 var api = app.MapGroup("/api/v1").RequireAuthorization().RequireRateLimiting("api");
 api.MapTenancyEndpoints();
 api.MapAuditEndpoints();
+var frontend = app.MapGroup("/api/v0").RequireAuthorization().RequireRateLimiting("api");
+frontend.MapFrontendEndpoints();
 api.MapAssetEndpoints();
 api.MapCommandEndpoints();
 app.Run();

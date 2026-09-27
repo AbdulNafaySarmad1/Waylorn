@@ -144,7 +144,7 @@ function contextFor(siteId: string, zoneId?: string, lineId?: string): TenancyCo
 export interface FixtureAsset {
   readonly orgId: string;
   readonly role: string;
-  readonly detail: AssetDetail;
+  readonly detail: AssetDetail & { extension: NonNullable<AssetDetail['extension']> };
 }
 
 const cap = (
@@ -180,7 +180,7 @@ interface AssetSeed {
   installedYear?: number;
   health?: HealthState;
   healthReason?: string;
-  extension: AssetDetail['extension'];
+  extension: NonNullable<AssetDetail['extension']>;
   firmware?: string;
   serial?: string;
   confidence?: AssetSummary['identityConfidence'];
@@ -197,7 +197,7 @@ function build(seed: AssetSeed): FixtureAsset {
   const context = contextFor(seed.site, seed.zone, seed.line);
   const site = siteById(seed.site);
   const siteConnected = site?.connectivity.state === 'connected';
-  const detail: AssetDetail = {
+  const detail: FixtureAsset['detail'] = {
     id: seed.id,
     kind: seed.kind,
     name: seed.name,
