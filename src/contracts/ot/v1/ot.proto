@@ -23,12 +23,25 @@ enum Operation {
   OPERATION_WRITE = 8;
 }
 
+enum RegisterKind {
+  REGISTER_KIND_UNSPECIFIED = 0;
+  REGISTER_KIND_HOLDING = 1;
+  REGISTER_KIND_INPUT = 2;
+}
+
+message ModbusReadSpec {
+  RegisterKind kind = 1;
+  uint32 start_address = 2; // Zero-based protocol address; validate <= 65535.
+  uint32 register_count = 3; // Validate 1..125 and no address wraparound.
+}
+
 message ObservationRequest {
   string request_id = 1;
   AssetRef asset = 2;
   Operation operation = 3;
   string capability = 4;
   int64 expires_unix_ms = 5;
+  ModbusReadSpec modbus_read = 6; // Site agent resolves asset to an allowlisted endpoint.
 }
 
 message ObservationResult {
@@ -36,4 +49,5 @@ message ObservationResult {
   bool accepted = 2;
   string reason_code = 3;
   int64 observed_unix_ms = 4;
+  repeated uint32 register_values = 5; // Each value must fit in uint16; read-only result.
 }

@@ -3,6 +3,8 @@
 
 use std::collections::BTreeSet;
 
+pub mod modbus_tcp;
+
 /// Operations have fixed risk classes; an adapter cannot downgrade a write.
 /// Numeric values match src/contracts/ot/v1/ot.proto and the .NET domain.
 #[repr(i32)]

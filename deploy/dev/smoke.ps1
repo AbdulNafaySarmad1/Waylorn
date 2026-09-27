@@ -77,4 +77,14 @@ $redId = ($red.Content | ConvertFrom-Json).id
 $redApproval = Send-Json 'POST' "/api/v1/commands/$redId/approve" $approver $null
 if ($redApproval.StatusCode -ne 409) { throw "RED approval without MFA returned $($redApproval.StatusCode)." }
 
-Write-Output 'Live Keycloak + PostgreSQL smoke passed: readiness, JWT, asset CRUD, role denial, AMBER approval, RED denial.'
+$auditPage = Send-Json 'GET' "/api/v1/audit?siteId=$site&limit=1" $admin $null
+if ($auditPage.StatusCode -ne 200) { throw "Audit query returned $($auditPage.StatusCode): $($auditPage.Content)" }
+$firstAudit = $auditPage.Content | ConvertFrom-Json
+if ($firstAudit.items.Count -ne 1 -or -not $firstAudit.nextCursor) { throw 'Audit pagination failed.' }
+$nextAudit = Send-Json 'GET' "/api/v1/audit?siteId=$site&limit=1&cursor=$($firstAudit.nextCursor)" $admin $null
+if ($nextAudit.StatusCode -ne 200) { throw "Audit cursor returned $($nextAudit.StatusCode): $($nextAudit.Content)" }
+if (($nextAudit.Content | ConvertFrom-Json).items[0].id -eq $firstAudit.items[0].id) { throw 'Audit cursor repeated a row.' }
+$deniedAudit = Send-Json 'GET' "/api/v1/audit?siteId=$site" $approver $null
+if ($deniedAudit.StatusCode -ne 403) { throw "Approver audit query returned $($deniedAudit.StatusCode)." }
+
+Write-Output 'Live Keycloak + PostgreSQL smoke passed: readiness, JWT, asset CRUD, role denial, AMBER approval, RED denial, audit pagination.'

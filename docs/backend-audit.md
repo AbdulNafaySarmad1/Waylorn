@@ -2,9 +2,9 @@
 
 ## Existing code
 
-`crates/ot-core` is the only Rust crate. It defines operation risk classes and a fail-closed eligibility gate. It has no protocol I/O, asset database, API, identity, broker, or business workflow. Its behavior belongs in the OT/device plane. Retain its location and API; relocation would be cosmetic and would disrupt the current build path.
+`crates/ot-core` is the only Rust crate. It defines operation risk classes, a fail-closed eligibility gate, and a bounded read-only Modbus TCP client verified against a loopback simulator. It has no asset database, API, identity, broker, or business workflow. Its behavior belongs in the OT/device plane. Retain its location and API; relocation would be cosmetic and would disrupt the current build path.
 
-No control-plane responsibilities are implemented in Rust. The earlier architecture documents already assign the control plane to .NET; the implementation gap is that no .NET project existed. No Go component or live Rust agent exists yet.
+No control-plane responsibilities are implemented in Rust. The earlier architecture documents already assign the control plane to .NET. No Go component or live Rust agent transport exists yet.
 
 ## Required runtime contracts
 

@@ -75,6 +75,7 @@ app.MapGet("/health/ready", async (WaylornDbContext db, CancellationToken ct) =>
 
 var api = app.MapGroup("/api/v1").RequireAuthorization().RequireRateLimiting("api");
 api.MapTenancyEndpoints();
+api.MapAuditEndpoints();
 api.MapAssetEndpoints();
 api.MapCommandEndpoints();
 app.Run();

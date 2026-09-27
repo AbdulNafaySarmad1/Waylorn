@@ -43,6 +43,8 @@ Set `Cache:Endpoint` to enable Valkey for 30-second asset-detail reads. Authoriz
 | `POST /api/v1/commands` | Operator/Administrator records an AMBER or RED request; requires `Idempotency-Key`, change ticket, and window. No dispatch. |
 | `GET /api/v1/commands/{id}` | Scoped command state. |
 | `POST /api/v1/commands/{id}/approve` | Separate Approver, current window, ticket, MFA for RED; writes audit. No dispatch. |
+| `GET /api/v1/audit` | Administrator-only, site-scoped audit rows with optional target filter and stable cursor pagination (up to 100). |
+| `GET /api/v1/audit/{id}` | Administrator-only record lookup with tenant/site enforcement. |
 
 The HTTP tests use an in-process fake identity service and SQLite to verify CRUD, relationship access, idempotency, approval, audit, readiness, tenant isolation, and optimistic concurrency. The local Compose smoke verified real Keycloak JWT validation, PostgreSQL writes and migration, NATS and Redpanda outbox acknowledgements, NATS outage recovery while Redpanda continued, and Valkey loss with PostgreSQL fallback. This is local development evidence only. Egress policy, AI governance, notification, billing, infrastructure inventory, a Go gateway, a Rust transport bridge, and site hardware validation remain unimplemented. An approval record must never be interpreted as OT authorization or physical execution.
 
