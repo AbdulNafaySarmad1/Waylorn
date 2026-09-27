@@ -16,6 +16,8 @@ test-results/
 .env*.local
 apps/web/next-env.d.ts
 **/bin/
+!crates/ot-core/src/bin/
 **/obj/
 *.userprefs
 deploy/dev/.env
+deploy/dev/spool/

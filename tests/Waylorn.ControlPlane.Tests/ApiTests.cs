@@ -22,6 +22,27 @@ namespace Waylorn.ControlPlane.Tests;
 public class ApiTests
 {
     [Fact]
+    public async Task Raw_observation_ingest_is_disabled_without_site_local_opt_in()
+    {
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
+        {
+            host.UseSetting("Authentication:Authority", "https://keycloak.example.test/realms/waylorn");
+            host.UseSetting("Authentication:Audience", "waylorn-api");
+            host.UseSetting("ConnectionStrings:Waylorn", "Host=localhost;Database=unused");
+            host.ConfigureTestServices(services => services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = "Test";
+                options.DefaultChallengeScheme = "Test";
+                options.DefaultForbidScheme = "Test";
+            }).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", _ => { }));
+        });
+        using var client = factory.CreateClient();
+        SetIdentity(client, Guid.NewGuid(), Guid.NewGuid(), "SiteAgent", "agent");
+        var response = await client.PostAsJsonAsync("/api/v1/observations", new { schemaVersion = 1 });
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Assets_relationships_approval_and_audit_are_enforced_over_http()
     {
         await using var sqlite = new SqliteConnection("Data Source=:memory:");
@@ -31,6 +52,7 @@ public class ApiTests
             host.UseSetting("Authentication:Authority", "https://keycloak.example.test/realms/waylorn");
             host.UseSetting("Authentication:Audience", "waylorn-api");
             host.UseSetting("ConnectionStrings:Waylorn", "Host=localhost;Database=unused");
+            host.UseSetting("Telemetry:AcceptRawObservations", "true");
             host.ConfigureTestServices(services =>
             {
                 services.RemoveAll<DbContextOptions<WaylornDbContext>>();
@@ -64,6 +86,43 @@ public class ApiTests
         Assert.Single((await (await client.GetAsync("/api/v1/sites")).Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray());
         var first = await CreateAsset(client, site, "PLC-1");
         var second = await CreateAsset(client, site, "Gateway-1");
+        var observed = DateTimeOffset.UtcNow.AddSeconds(-2);
+        var observation = new { schemaVersion = 1, requestId = Guid.NewGuid(), siteId = site, assetId = first,
+            source = "site-agent/modbus-tcp", observedUtc = observed, expectedIntervalMs = 1000,
+            values = new[] { new { signalKey = "modbus.holding.10", value = 1234 } } };
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.PostAsJsonAsync("/api/v1/observations", observation)).StatusCode);
+        SetIdentity(client, org, site, "SiteAgent", "agent-1");
+        Assert.Equal(HttpStatusCode.Accepted,
+            (await client.PostAsJsonAsync("/api/v1/observations", observation)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await client.PostAsJsonAsync("/api/v1/observations", observation)).StatusCode);
+        var changed = new { observation.schemaVersion, observation.requestId, observation.siteId, observation.assetId,
+            observation.source, observation.observedUtc, observation.expectedIntervalMs,
+            values = new[] { new { signalKey = "modbus.holding.10", value = 9999 } } };
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await client.PostAsJsonAsync("/api/v1/observations", changed)).StatusCode);
+        SetIdentity(client, org, site, "Administrator", "admin");
+        var live = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/assets/{first}/live");
+        Assert.Equal(1234, live.GetProperty("signals")[0].GetProperty("value").GetInt32());
+        using (var streamCts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+        using (var response = await client.GetAsync($"/api/v0/orgs/{org}/assets/{first}/live/stream",
+            HttpCompletionOption.ResponseHeadersRead, streamCts.Token))
+        {
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal("text/event-stream", response.Content.Headers.ContentType?.MediaType);
+            using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(streamCts.Token));
+            Assert.StartsWith("id: ", await reader.ReadLineAsync(streamCts.Token));
+            Assert.Equal("event: signal", await reader.ReadLineAsync(streamCts.Token));
+            Assert.Contains("\"value\":1234", await reader.ReadLineAsync(streamCts.Token));
+        }
+        var signalList = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/assets/{first}/telemetry/signals");
+        Assert.Equal("modbus.holding.10", signalList.GetProperty("items")[0].GetProperty("key").GetString());
+        var seriesUrl = $"/api/v0/orgs/{org}/assets/{first}/telemetry/series?signal=modbus.holding.10" +
+            $"&from={Uri.EscapeDataString(observed.AddMinutes(-1).ToString("O"))}" +
+            $"&to={Uri.EscapeDataString(observed.AddMinutes(1).ToString("O"))}&maxPoints=100";
+        var series = await client.GetFromJsonAsync<JsonElement>(seriesUrl);
+        Assert.Equal(1234, series.GetProperty("buckets")[0].GetProperty("mean").GetDouble());
         var me = await client.GetFromJsonAsync<JsonElement>("/api/v0/me");
         Assert.Equal(org, me.GetProperty("organizations")[0].GetProperty("id").GetGuid());
         var webSites = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/sites");
@@ -167,7 +226,7 @@ internal sealed class TestAuthHandler(IOptionsMonitor<AuthenticationSchemeOption
             new Claim("site_id", Request.Headers["X-Test-Site"].ToString()),
             new Claim("waylorn_role", Request.Headers["X-Test-Role"].ToString()),
             new Claim("sub", Request.Headers["X-Test-Subject"].ToString()),
-            new Claim("principal_type", "human"),
+            new Claim("principal_type", Request.Headers["X-Test-Role"] == "SiteAgent" ? "workload" : "human"),
             new Claim("amr", "mfa")
         };
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));

@@ -261,3 +261,49 @@ BEGIN
     END IF;
 END $EF$;
 COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927193220_AddTelemetry') THEN
+    CREATE TABLE "Telemetry" (
+        "Id" uuid NOT NULL,
+        "OrganizationId" uuid NOT NULL,
+        "SiteId" uuid NOT NULL,
+        "AssetId" uuid NOT NULL,
+        "RequestId" uuid NOT NULL,
+        "SignalKey" character varying(80) NOT NULL,
+        "Value" integer NOT NULL,
+        "Source" character varying(120) NOT NULL,
+        "ObservedUtc" timestamp with time zone NOT NULL,
+        "ReceivedUtc" timestamp with time zone NOT NULL,
+        "ExpectedIntervalMs" integer NOT NULL,
+        CONSTRAINT "PK_Telemetry" PRIMARY KEY ("Id"),
+        CONSTRAINT "FK_Telemetry_Assets_OrganizationId_AssetId" FOREIGN KEY ("OrganizationId", "AssetId") REFERENCES "Assets" ("OrganizationId", "Id") ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927193220_AddTelemetry') THEN
+    CREATE INDEX "IX_Telemetry_OrganizationId_AssetId_SignalKey_ObservedUtc" ON "Telemetry" ("OrganizationId", "AssetId", "SignalKey", "ObservedUtc");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927193220_AddTelemetry') THEN
+    CREATE UNIQUE INDEX "IX_Telemetry_OrganizationId_RequestId_SignalKey" ON "Telemetry" ("OrganizationId", "RequestId", "SignalKey");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260927193220_AddTelemetry') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260927193220_AddTelemetry', '10.0.9');
+    END IF;
+END $EF$;
+COMMIT;

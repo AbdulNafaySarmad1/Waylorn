@@ -18,6 +18,7 @@ public sealed class WaylornDbContext(DbContextOptions<WaylornDbContext> options,
     public DbSet<AssetRelation> Relationships => Set<AssetRelation>();
     public DbSet<CommandRequest> Commands => Set<CommandRequest>();
     public DbSet<AuditRecord> Audit => Set<AuditRecord>();
+    public DbSet<TelemetrySample> Telemetry => Set<TelemetrySample>();
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -114,6 +115,17 @@ public sealed class WaylornDbContext(DbContextOptions<WaylornDbContext> options,
             e.Property(x => x.TargetType).HasMaxLength(100);
             e.Property(x => x.Outcome).HasMaxLength(100);
             e.HasIndex(x => new { x.OrganizationId, x.AtUtc });
+            e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
+        });
+        model.Entity<TelemetrySample>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasOne<Asset>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.Property(x => x.SignalKey).HasMaxLength(80);
+            e.Property(x => x.Source).HasMaxLength(120);
+            e.HasIndex(x => new { x.OrganizationId, x.RequestId, x.SignalKey }).IsUnique();
+            e.HasIndex(x => new { x.OrganizationId, x.AssetId, x.SignalKey, x.ObservedUtc });
             e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
         });
         model.Entity<OutboxMessage>(e =>

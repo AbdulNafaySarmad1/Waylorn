@@ -10,7 +10,7 @@ Status: development slice, 2026-09-27. This is the primary application backend. 
 - `Api`: authenticated ASP.NET Core endpoints and organization/site/role policy checks.
 - `src/contracts/ot/v1/ot.proto`: versioned draft boundary with Rust/Go. Operation numeric codes match both .NET and Rust. No live RPC exists.
 
-The Rust crate remains at `crates/ot-core` because its code belongs to the OT plane and moving it provides no functional benefit. There is no Go service yet.
+The Rust crate remains at `crates/ot-core` because its code belongs to the OT plane. A small Go site gateway now handles the outbound observation pilot; it does not implement the planned general network plane.
 
 ## Configure and run
 
@@ -45,6 +45,7 @@ Set `Cache:Endpoint` to enable Valkey for 30-second asset-detail reads. Authoriz
 | `POST /api/v1/commands/{id}/approve` | Separate Approver, current window, ticket, MFA for RED; writes audit. No dispatch. |
 | `GET /api/v1/audit` | Administrator-only, site-scoped audit rows with optional target filter and stable cursor pagination (up to 100). |
 | `GET /api/v1/audit/{id}` | Administrator-only record lookup with tenant/site enforcement. |
+| `POST /api/v1/observations` | SiteAgent workload only; bounded, versioned read-only Modbus observation batch with idempotent retry. Raw ingest is disabled unless explicitly enabled at a site-local deployment. |
 
 The frontend also uses a read-only `/api/v0` adapter:
 
@@ -55,10 +56,16 @@ The frontend also uses a read-only `/api/v0` adapter:
 | `GET /api/v0/orgs/{orgId}/hierarchy` | Region, site, and zone levels with current asset counts. Production lines are not yet modeled. |
 | `GET /api/v0/orgs/{orgId}/assets` | Claim-scoped asset search, supported filters, and offset pagination. Unsupported live-data filters return 501. |
 | `GET /api/v0/orgs/{orgId}/assets/{assetId}` | Claim-scoped detail from current registry fields. Unavailable extension, capabilities, protocols, and actions are omitted or empty. |
+| `GET /api/v0/orgs/{orgId}/assets/{assetId}/live` | Latest site-local numeric signal values with explicit freshness quality. |
+| `GET /api/v0/orgs/{orgId}/assets/{assetId}/live/stream` | Current-state SSE signals and heartbeat; reconnect starts with current state. |
+| `GET /api/v0/orgs/{orgId}/assets/{assetId}/telemetry/signals` | Keys with retained numeric history. |
+| `GET /api/v0/orgs/{orgId}/assets/{assetId}/telemetry/series` | Bounded seven-day server aggregation, up to 2,000 buckets. |
+
+Raw telemetry ingestion requires `Telemetry:AcceptRawObservations=true`, set only where the PostgreSQL instance is a customer-controlled site-local store. The default is disabled. Samples older than seven days are excluded from queries and removed by an hourly retention worker. This numeric register pilot does not provide Redpanda telemetry streaming, calibrated units, or sensor quality certification.
 
 Registry assets have no tag, lifecycle, or measured health fields yet. The adapter emits an `UNASSIGNED-{id}` display tag and explicit `unknown` state. It does not infer site connectivity or OT capabilities. Offset pagination is not stable across concurrent inventory changes; use the `/api/v1` audit cursor for stable audit browsing.
 
-The HTTP tests use an in-process fake identity service and SQLite to verify CRUD, relationship access, idempotency, approval, audit, readiness, tenant isolation, and optimistic concurrency. The local Compose smoke verified real Keycloak JWT validation, PostgreSQL writes and migration, NATS and Redpanda outbox acknowledgements, NATS outage recovery while Redpanda continued, and Valkey loss with PostgreSQL fallback. This is local development evidence only. Egress policy, AI governance, notification, billing, infrastructure inventory, a Go gateway, a Rust transport bridge, and site hardware validation remain unimplemented. An approval record must never be interpreted as OT authorization or physical execution.
+The HTTP tests use an in-process fake identity service and SQLite to verify CRUD, relationship access, idempotency, approval, audit, telemetry, readiness, tenant isolation, and optimistic concurrency. The local Compose smoke verified real Keycloak JWT validation, PostgreSQL writes and migration, NATS and Redpanda outbox acknowledgements, NATS outage recovery while Redpanda continued, and Valkey loss with PostgreSQL fallback. The OT loopback smoke verified a Modbus simulator through Rust, Go, Keycloak, .NET, PostgreSQL, and the query API. This is local development evidence only. Egress policy, AI governance, notification, billing, infrastructure inventory, full Go tunnel and gateway lifecycle, authenticated Protobuf transport, and site hardware validation remain unimplemented. An approval record must never be interpreted as OT authorization or physical execution.
 
 Organizations, sites, and zones are explicit tenant-owned records. New assets require a registered site and any selected zone must belong to it. Existing installations need a site backfill before a future database foreign key can enforce this relationship for historical assets. Keycloak site claims remain the authorization source; adding a site record does not grant access.
 

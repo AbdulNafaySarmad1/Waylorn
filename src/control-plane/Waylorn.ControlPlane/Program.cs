@@ -29,6 +29,7 @@ builder.Services.AddScoped(sp =>
 });
 builder.Services.AddDbContext<WaylornDbContext>(options => options.UseNpgsql(connection));
 builder.Services.AddSingleton<AssetCache>();
+builder.Services.AddHostedService<TelemetryRetentionWorker>();
 builder.Services.AddScoped<CommandWorkflow>();
 var eventingEnabled = builder.Configuration.GetValue("Eventing:Enabled", !builder.Environment.IsDevelopment());
 if (builder.Configuration.GetValue<bool>("Eventing:BootstrapDestinations") && !builder.Environment.IsDevelopment())
@@ -80,8 +81,10 @@ api.MapTenancyEndpoints();
 api.MapAuditEndpoints();
 var frontend = app.MapGroup("/api/v0").RequireAuthorization().RequireRateLimiting("api");
 frontend.MapFrontendEndpoints();
+frontend.MapTelemetryEndpoints();
 api.MapAssetEndpoints();
 api.MapCommandEndpoints();
+api.MapObservationEndpoints();
 app.Run();
 
 public partial class Program;

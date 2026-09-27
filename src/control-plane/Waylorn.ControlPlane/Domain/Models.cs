@@ -101,6 +101,23 @@ public sealed class AuditRecord : ITenantOwned
     public DateTimeOffset AtUtc { get; set; }
 }
 
+// Site-local observation history. Samples are keyed by the producer request and signal
+// so a retried batch cannot create duplicate measurements.
+public sealed class TelemetrySample : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid SiteId { get; set; }
+    public Guid AssetId { get; set; }
+    public Guid RequestId { get; set; }
+    public string SignalKey { get; set; } = "";
+    public int Value { get; set; }
+    public string Source { get; set; } = "";
+    public DateTime ObservedUtc { get; set; }
+    public DateTime ReceivedUtc { get; set; }
+    public int ExpectedIntervalMs { get; set; }
+}
+
 public enum OutboxDestination { Audit, Control }
 
 public sealed class OutboxMessage : ITenantOwned

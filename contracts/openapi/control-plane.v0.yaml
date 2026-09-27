@@ -178,7 +178,8 @@ paths:
       operationId: streamLiveSignals
       description: |
         Server-Sent Events. Event `signal` carries a LiveSignal JSON document. Event
-        `heartbeat` carries a LiveHeartbeat. Supports `Last-Event-ID`.
+        `heartbeat` carries a LiveHeartbeat. Reconnection begins with the latest state;
+        this state stream does not replay every historical event.
       parameters:
         - { $ref: '#/components/parameters/OrgId' }
         - { $ref: '#/components/parameters/AssetId' }

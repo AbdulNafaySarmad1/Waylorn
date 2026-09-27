@@ -1,0 +1,20 @@
+# Site observation envelope v1
+
+The Rust `ot-observe` process emits one local JSON result: `{"schemaVersion":1,"values":[4660]}`. The Go site gateway validates it and sends a bounded JSON batch to `POST /api/v1/observations`. This is the implemented local observation contract; `src/contracts/ot/v1/ot.proto` remains a draft for a future authenticated RPC boundary.
+
+```json
+{
+  "schemaVersion": 1,
+  "requestId": "11111111-1111-4111-8111-111111111111",
+  "siteId": "22222222-2222-4222-8222-222222222222",
+  "assetId": "33333333-3333-4333-8333-333333333333",
+  "source": "site-agent/modbus-tcp",
+  "observedUtc": "2026-09-28T00:00:00Z",
+  "expectedIntervalMs": 1000,
+  "values": [{ "signalKey": "modbus.holding.10", "value": 4660 }]
+}
+```
+
+The API requires a Keycloak `SiteAgent` workload token with an exact `site_id` claim. It validates the tenant, registered industrial asset, timestamp, register values, and signal key syntax. A batch has 1–125 unique signals. A successful first write returns 202; an identical retry returns 200; reuse of a request ID with different data returns 409. Raw ingestion is disabled unless the control-plane deployment explicitly sets `Telemetry:AcceptRawObservations=true`. Enable it only for a customer-controlled site-local data store.
+
+The gateway reads one configured Modbus range and cannot request writes. It keeps unacknowledged batches in a local spool and sends them over an outbound HTTPS connection. Loopback HTTP needs an explicit development flag. OAuth client credentials are site-scoped; optional client certificate and CA settings are supported. Protect the spool with host disk encryption and local access controls. The current 10,000-file spool limit and seven-day ingest window mean a longer outage requires operator recovery before replay. No cloud tunnel, hardware certification, or cross-runtime Protobuf RPC is claimed.

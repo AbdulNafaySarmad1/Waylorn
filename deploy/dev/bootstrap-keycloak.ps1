@@ -7,7 +7,7 @@ $settings = @{}
 foreach ($line in Get-Content -LiteralPath $envPath) {
     if ($line -match '^([^#=]+)=(.*)$') { $settings[$matches[1]] = $matches[2] }
 }
-foreach ($key in @('WAYLORN_TEST_ADMIN_PASSWORD', 'WAYLORN_TEST_APPROVER_PASSWORD', 'WAYLORN_WEB_CLIENT_SECRET')) {
+foreach ($key in @('WAYLORN_TEST_ADMIN_PASSWORD', 'WAYLORN_TEST_APPROVER_PASSWORD', 'WAYLORN_WEB_CLIENT_SECRET', 'WAYLORN_AGENT_CLIENT_SECRET')) {
     if (-not $settings.ContainsKey($key)) {
         $settings[$key] = [Convert]::ToHexString([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
         Add-Content -LiteralPath $envPath -Value "$key=$($settings[$key])"
@@ -64,6 +64,26 @@ if ($webClients.Count -eq 0) {
     $null = Invoke-RestMethod -Uri "$BaseUrl/admin/realms/waylorn/clients" -Method Post -Headers $headers -ContentType 'application/json' -Body $webClient
 }
 
+$agentClients = @(Invoke-RestMethod -Uri "$BaseUrl/admin/realms/waylorn/clients?clientId=waylorn-agent" -Headers $headers | Where-Object { $_.clientId -eq 'waylorn-agent' })
+if ($agentClients.Count -eq 0) {
+    $agentClient = @{
+        clientId = 'waylorn-agent'; enabled = $true; protocol = 'openid-connect'
+        publicClient = $false; secret = $settings.WAYLORN_AGENT_CLIENT_SECRET
+        serviceAccountsEnabled = $true; directAccessGrantsEnabled = $false; standardFlowEnabled = $false
+        protocolMappers = $mappers
+    } | ConvertTo-Json -Depth 12
+    $null = Invoke-RestMethod -Uri "$BaseUrl/admin/realms/waylorn/clients" -Method Post -Headers $headers -ContentType 'application/json' -Body $agentClient
+    $agentClients = @(Invoke-RestMethod -Uri "$BaseUrl/admin/realms/waylorn/clients?clientId=waylorn-agent" -Headers $headers | Where-Object { $_.clientId -eq 'waylorn-agent' })
+}
+$serviceUser = Invoke-RestMethod -Uri "$BaseUrl/admin/realms/waylorn/clients/$($agentClients[0].id)/service-account-user" -Headers $headers
+$serviceUser | Add-Member -NotePropertyName attributes -NotePropertyValue @{
+    org_id = @($settings.WAYLORN_TEST_ORG_ID)
+    site_id = @($settings.WAYLORN_TEST_SITE_ID)
+    waylorn_role = @('SiteAgent')
+    principal_type = @('workload')
+} -Force
+$null = Invoke-RestMethod -Uri "$BaseUrl/admin/realms/waylorn/users/$($serviceUser.id)" -Method Put -Headers $headers -ContentType 'application/json' -Body ($serviceUser | ConvertTo-Json -Depth 12)
+
 foreach ($entry in @(
     @{ username = 'waylorn-admin'; role = 'Administrator'; password = $settings.WAYLORN_TEST_ADMIN_PASSWORD },
     @{ username = 'waylorn-approver'; role = 'Approver'; password = $settings.WAYLORN_TEST_APPROVER_PASSWORD }
@@ -98,4 +118,4 @@ WAYLORN_OIDC_CLIENT_SECRET=$($settings.WAYLORN_WEB_CLIENT_SECRET)
 WAYLORN_HSTS_MAX_AGE=0
 "@ | Set-Content -LiteralPath $webEnvPath
 
-Write-Output "Keycloak realm and local web client ready. Test organization: $($settings.WAYLORN_TEST_ORG_ID); site: $($settings.WAYLORN_TEST_SITE_ID)."
+Write-Output "Keycloak realm, web client, and site agent ready. Test organization: $($settings.WAYLORN_TEST_ORG_ID); site: $($settings.WAYLORN_TEST_SITE_ID)."

@@ -4,7 +4,8 @@ package waylorn.ot.v1;
 
 option csharp_namespace = "Waylorn.Contracts.Ot.V1";
 
-// Contract draft. No runtime transport is connected in this repository yet.
+// Draft for a future authenticated RPC boundary. The current simulator pilot
+// uses the versioned local JSON envelope in src/contracts/observations/v1.
 message AssetRef {
   string organization_id = 1;
   string site_id = 2;
