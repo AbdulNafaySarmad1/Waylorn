@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+  - tools/*
+
+# Supply chain: only these packages may run install scripts.
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
+  - unrs-resolver

@@ -1,0 +1,23 @@
+{
+  "name": "@waylorn/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "generate": "openapi-typescript ../../contracts/openapi/control-plane.v0.yaml -o src/generated/control-plane.ts --enum-values --immutable=false && node scripts/banner.mjs",
+    "check:generated": "pnpm generate && git diff --exit-code -- src/generated",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "openapi-fetch": "0.17.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "6.0.3",
+    "vitest": "5.0.2"
+  }
+}
