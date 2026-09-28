@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Waylorn.ControlPlane.Application;
 using Waylorn.ControlPlane.Domain;
 using Waylorn.ControlPlane.Infrastructure;
 
@@ -44,10 +45,16 @@ public static class FrontendEndpoints
     {
         if (!InOrganization(orgId, db)) return Results.NotFound();
         var sites = await VisibleSites(http.User, db).OrderBy(x => x.Code).Take(500).ToListAsync(ct);
+        var siteIds = sites.Select(x => x.Id).ToArray();
+        var heartbeats = await db.SiteAgentHeartbeats.AsNoTracking()
+            .Where(x => siteIds.Contains(x.SiteId)).ToListAsync(ct);
+        var latest = heartbeats.GroupBy(x => x.SiteId)
+            .ToDictionary(x => x.Key, x => x.MaxBy(h => h.LastSeenUtc));
+        var now = DateTime.UtcNow;
         return Results.Ok(new { items = sites.Select(x => new
         {
             x.Id, x.Code, x.Name, x.RegionName, x.Environment, x.Timezone,
-            connectivity = new { state = "unknown" }
+            connectivity = SiteConnectivityPolicy.Evaluate(latest.GetValueOrDefault(x.Id), now)
         }) });
     }
 

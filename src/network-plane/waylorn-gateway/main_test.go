@@ -84,3 +84,55 @@ func TestRawObservationsRequireLoopbackApi(t *testing.T) {
 		t.Fatalf("loopback site API was rejected: %v", err)
 	}
 }
+
+func TestHeartbeatReportsLocalSpoolDepth(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/pending.json", []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/site-agents/heartbeat" || r.Header.Get("Authorization") != "Bearer test-token" {
+			t.Error("heartbeat route or authorization was wrong")
+		}
+		var body struct {
+			SchemaVersion int    `json:"schemaVersion"`
+			SiteID        string `json:"siteId"`
+			IntervalMs    int    `json:"intervalMs"`
+			SpoolDepth    int    `json:"spoolDepth"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		if body.SchemaVersion != 1 || body.SiteID != "test-site" || body.IntervalMs != 1000 || body.SpoolDepth != 1 {
+			t.Errorf("unexpected heartbeat: %+v", body)
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+	cfg := config{spool: dir, apiURL: server.URL, siteID: "test-site", intervalMs: 1000}
+	auth := &tokenProvider{token: "test-token", expires: time.Now().Add(time.Minute)}
+	if err := sendHeartbeat(context.Background(), cfg, server.Client(), auth); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestHeartbeatContinuesWhenDeviceReadFails(t *testing.T) {
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/site-agents/heartbeat" {
+			t.Errorf("unexpected route: %s", r.URL.Path)
+		}
+		called = true
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+	cfg := config{spool: t.TempDir(), apiURL: server.URL, siteID: "test-site",
+		intervalMs: 1000, reader: "/missing-ot-observe"}
+	auth := &tokenProvider{token: "test-token", expires: time.Now().Add(time.Minute)}
+	if err := runCycle(context.Background(), cfg, server.Client(), auth); err == nil {
+		t.Fatal("failed device read was hidden")
+	}
+	if !called {
+		t.Fatal("gateway did not report its own connectivity after a failed device read")
+	}
+}

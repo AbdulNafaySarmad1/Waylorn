@@ -124,6 +124,16 @@ public sealed class TelemetrySample : ITenantOwned
     public int ExpectedIntervalMs { get; set; }
 }
 
+public sealed class SiteAgentHeartbeat : ITenantOwned
+{
+    public Guid OrganizationId { get; set; }
+    public Guid SiteId { get; set; }
+    public string AgentId { get; set; } = "";
+    public DateTime LastSeenUtc { get; set; }
+    public int IntervalMs { get; set; }
+    public int SpoolDepth { get; set; }
+}
+
 public sealed class Incident : ITenantOwned
 {
     public Guid Id { get; set; }

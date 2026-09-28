@@ -96,6 +96,7 @@ frontend.MapOverviewEndpoints();
 api.MapAssetEndpoints();
 api.MapCommandEndpoints();
 api.MapObservationEndpoints();
+api.MapSiteAgentEndpoints();
 api.MapIncidentEndpoints();
 api.MapMaintenanceEndpoints();
 app.Run();

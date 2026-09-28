@@ -44,6 +44,12 @@ try {
         -Headers @{ Authorization = "Bearer $($admin.access_token)" }
     $signal = @($snapshot.signals | Where-Object { $_.key -eq 'modbus.holding.10' })
     if ($signal.Count -ne 1 -or $signal[0].value -ne 4660) { throw 'Rust/Go/.NET telemetry value did not round-trip.' }
+    $sites = Invoke-RestMethod -Uri "$Api/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/sites" `
+        -Headers @{ Authorization = "Bearer $($admin.access_token)" }
+    $site = @($sites.items | Where-Object { $_.id -eq $settings.WAYLORN_TEST_SITE_ID })
+    if ($site.Count -ne 1 -or $site[0].connectivity.state -ne 'connected') {
+        throw 'Authenticated site gateway heartbeat did not update connectivity.'
+    }
     Write-Output "OT loopback integration passed: simulator -> Rust -> Go -> Keycloak -> .NET -> PostgreSQL -> API. Asset: $($asset.id)"
 } finally {
     if (-not $simulator.HasExited) { Stop-Process -Id $simulator.Id -Force }

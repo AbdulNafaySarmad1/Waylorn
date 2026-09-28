@@ -14,7 +14,7 @@ No control-plane responsibilities are implemented in Rust. The earlier architect
 | Command request, expiry, acknowledgement and outcome | .NET ↔ site agent | NATS JetStream, site-side authorization | Request/approval record events publish from an outbox; no site command dispatch or outcome contract yet |
 | Incident and maintenance state | .NET → operational consumers | NATS JetStream `waylorn.operation.v1.>` | Tenant/site-scoped records, audit, version checks, and operational outbox acknowledgements verified locally; external CMMS/notification consumers absent |
 | High-volume telemetry, audit, security, integrations | Site/.NET → consumers | Redpanda with versioned schemas | Audit JSON v1 events publish from an outbox; site-local numeric telemetry is stored in PostgreSQL for the pilot; telemetry streaming and security/integration events remain absent |
-| Gateway session and route health | Go ↔ .NET | Authenticated versioned RPC and NATS health events | Not implemented |
+| Gateway session and route health | Go ↔ .NET | Authenticated versioned RPC and NATS health events | Site-scoped authenticated HTTP heartbeat and PostgreSQL freshness state implemented; RPC, route health, and NATS health events absent |
 
 The first .NET slice stores reference assets, relationships, approvals, audits, a bounded site-local numeric observation history, and broker outbox records in PostgreSQL. New audit rows can be signed with an external HMAC key and verified individually; completeness and deletion detection still require an immutable external evidence path. It does not command equipment. The loopback simulator bridge is not a site-ready transport; authenticated cross-runtime RPC and hardware compatibility tests must precede site use.
 

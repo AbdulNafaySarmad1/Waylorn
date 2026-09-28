@@ -33,6 +33,7 @@ public sealed class WaylornDbContext : DbContext
     public DbSet<CommandRequest> Commands => Set<CommandRequest>();
     public DbSet<AuditRecord> Audit => Set<AuditRecord>();
     public DbSet<TelemetrySample> Telemetry => Set<TelemetrySample>();
+    public DbSet<SiteAgentHeartbeat> SiteAgentHeartbeats => Set<SiteAgentHeartbeat>();
     public DbSet<Incident> Incidents => Set<Incident>();
     public DbSet<IncidentAsset> IncidentAssets => Set<IncidentAsset>();
     public DbSet<MaintenanceWorkOrder> WorkOrders => Set<MaintenanceWorkOrder>();
@@ -145,6 +146,15 @@ public sealed class WaylornDbContext : DbContext
             e.Property(x => x.Source).HasMaxLength(120);
             e.HasIndex(x => new { x.OrganizationId, x.RequestId, x.SignalKey }).IsUnique();
             e.HasIndex(x => new { x.OrganizationId, x.AssetId, x.SignalKey, x.ObservedUtc });
+            e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
+        });
+        model.Entity<SiteAgentHeartbeat>(e =>
+        {
+            e.HasKey(x => new { x.OrganizationId, x.SiteId, x.AgentId });
+            e.HasOne<Site>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.SiteId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.Property(x => x.AgentId).HasMaxLength(200);
+            e.HasIndex(x => new { x.OrganizationId, x.SiteId, x.LastSeenUtc });
             e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
         });
         model.Entity<Incident>(e =>

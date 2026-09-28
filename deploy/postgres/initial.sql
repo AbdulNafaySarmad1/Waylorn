@@ -463,3 +463,37 @@ BEGIN
     END IF;
 END $EF$;
 COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928055635_AddSiteAgentHeartbeat') THEN
+    CREATE TABLE "SiteAgentHeartbeats" (
+        "OrganizationId" uuid NOT NULL,
+        "SiteId" uuid NOT NULL,
+        "AgentId" character varying(200) NOT NULL,
+        "LastSeenUtc" timestamp with time zone NOT NULL,
+        "IntervalMs" integer NOT NULL,
+        "SpoolDepth" integer NOT NULL,
+        CONSTRAINT "PK_SiteAgentHeartbeats" PRIMARY KEY ("OrganizationId", "SiteId", "AgentId"),
+        CONSTRAINT "FK_SiteAgentHeartbeats_Sites_OrganizationId_SiteId" FOREIGN KEY ("OrganizationId", "SiteId") REFERENCES "Sites" ("OrganizationId", "Id") ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928055635_AddSiteAgentHeartbeat') THEN
+    CREATE INDEX "IX_SiteAgentHeartbeats_OrganizationId_SiteId_LastSeenUtc" ON "SiteAgentHeartbeats" ("OrganizationId", "SiteId", "LastSeenUtc");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928055635_AddSiteAgentHeartbeat') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260928055635_AddSiteAgentHeartbeat', '10.0.9');
+    END IF;
+END $EF$;
+COMMIT;

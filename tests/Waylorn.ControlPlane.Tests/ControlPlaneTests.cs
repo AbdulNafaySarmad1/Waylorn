@@ -35,6 +35,19 @@ public class ControlPlaneTests
     }
 
     [Fact]
+    public void Site_link_state_uses_server_seen_heartbeat_and_spool_depth()
+    {
+        var now = DateTime.UtcNow;
+        var row = new SiteAgentHeartbeat { LastSeenUtc = now, IntervalMs = 1000, SpoolDepth = 0 };
+        Assert.Equal("unknown", SiteConnectivityPolicy.Evaluate(null, now).State);
+        Assert.Equal("connected", SiteConnectivityPolicy.Evaluate(row, now).State);
+        row.SpoolDepth = 2;
+        Assert.Equal("degraded", SiteConnectivityPolicy.Evaluate(row, now).State);
+        row.LastSeenUtc = now.AddSeconds(-31);
+        Assert.Equal("disconnected", SiteConnectivityPolicy.Evaluate(row, now).State);
+    }
+
+    [Fact]
     public void Access_requires_matching_organization_site_and_role()
     {
         var org = Guid.NewGuid();

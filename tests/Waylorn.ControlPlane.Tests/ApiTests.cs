@@ -122,7 +122,11 @@ public class ApiTests
             values = new[] { new { signalKey = "modbus.holding.10", value = 1234 } } };
         Assert.Equal(HttpStatusCode.Forbidden,
             (await client.PostAsJsonAsync("/api/v1/observations", observation)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/v1/site-agents/heartbeat",
+            new { schemaVersion = 1, siteId = site, intervalMs = 1000, spoolDepth = 0 })).StatusCode);
         SetIdentity(client, org, site, "SiteAgent", "agent-1");
+        Assert.Equal(HttpStatusCode.Accepted, (await client.PostAsJsonAsync("/api/v1/site-agents/heartbeat",
+            new { schemaVersion = 1, siteId = site, intervalMs = 1000, spoolDepth = 0 })).StatusCode);
         Assert.Equal(HttpStatusCode.Accepted,
             (await client.PostAsJsonAsync("/api/v1/observations", observation)).StatusCode);
         var expired = new { observation.schemaVersion, requestId = Guid.NewGuid(), observation.siteId,
@@ -138,6 +142,9 @@ public class ApiTests
         Assert.Equal(HttpStatusCode.Conflict,
             (await client.PostAsJsonAsync("/api/v1/observations", changed)).StatusCode);
         SetIdentity(client, org, site, "Administrator", "admin");
+        var connectedSites = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/sites");
+        Assert.Equal("connected", connectedSites.GetProperty("items")[0].GetProperty("connectivity")
+            .GetProperty("state").GetString());
         var live = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/assets/{first}/live");
         Assert.Equal(1234, live.GetProperty("signals")[0].GetProperty("value").GetInt32());
         using (var streamCts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))

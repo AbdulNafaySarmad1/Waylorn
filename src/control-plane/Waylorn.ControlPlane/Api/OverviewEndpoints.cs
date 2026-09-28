@@ -21,6 +21,10 @@ public static class OverviewEndpoints
         if (sites.Count > 500) return Results.Problem(statusCode: 413, detail: "Overview covers at most 500 sites.");
         var ids = sites.Select(x => x.Id).ToArray();
         var now = DateTime.UtcNow;
+        var heartbeats = await db.SiteAgentHeartbeats.AsNoTracking()
+            .Where(x => ids.Contains(x.SiteId)).ToListAsync(ct);
+        var latestHeartbeats = heartbeats.GroupBy(x => x.SiteId)
+            .ToDictionary(x => x.Key, x => x.MaxBy(h => h.LastSeenUtc));
         var assetCounts = await db.Assets.AsNoTracking().Where(x => ids.Contains(x.SiteId))
             .GroupBy(x => x.SiteId).Select(x => new { x.Key, Count = x.Count() })
             .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
@@ -58,7 +62,7 @@ public static class OverviewEndpoints
                 site = new
                 {
                     site.Id, site.Code, site.Name, site.RegionName, site.Environment, site.Timezone,
-                    connectivity = new { state = "unknown" }
+                    connectivity = SiteConnectivityPolicy.Evaluate(latestHeartbeats.GetValueOrDefault(site.Id), now)
                 },
                 assetHealth = new { ok = 0, warning = 0, fault = 0,
                     unknown = assetCounts.GetValueOrDefault(site.Id) },

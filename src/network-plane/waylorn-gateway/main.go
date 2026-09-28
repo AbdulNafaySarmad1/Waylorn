@@ -192,6 +192,11 @@ func newClient() (*http.Client, error) {
 }
 
 func runCycle(ctx context.Context, c config, client *http.Client, auth *tokenProvider) error {
+	pollErr := pollCycle(ctx, c, client, auth)
+	return errors.Join(pollErr, sendHeartbeat(ctx, c, client, auth))
+}
+
+func pollCycle(ctx context.Context, c config, client *http.Client, auth *tokenProvider) error {
 	// Drain old local data first. If the control plane is unavailable, continue one
 	// bounded read and retain it on disk; no cloud service is needed for site I/O.
 	firstErr := drain(ctx, c, client, auth)
@@ -212,7 +217,51 @@ func runCycle(ctx context.Context, c config, client *http.Client, auth *tokenPro
 	if firstErr != nil {
 		return firstErr
 	}
-	return drain(ctx, c, client, auth)
+	if err := drain(ctx, c, client, auth); err != nil {
+		return err
+	}
+	return sendHeartbeat(ctx, c, client, auth)
+}
+
+func sendHeartbeat(ctx context.Context, c config, client *http.Client, auth *tokenProvider) error {
+	entries, err := os.ReadDir(c.spool)
+	if err != nil {
+		return err
+	}
+	depth := 0
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+			depth++
+		}
+	}
+	token, err := auth.get(ctx)
+	if err != nil {
+		return err
+	}
+	data, err := json.Marshal(map[string]any{
+		"schemaVersion": 1, "siteId": c.siteID,
+		"intervalMs": c.intervalMs, "spoolDepth": depth,
+	})
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.apiURL+"/api/v1/site-agents/heartbeat", bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	response, err := client.Do(request)
+	if err != nil {
+		return err
+	}
+	io.Copy(io.Discard, io.LimitReader(response.Body, 256))
+	response.Body.Close()
+	if response.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("site heartbeat API returned %d", response.StatusCode)
+	}
+	return nil
 }
 
 func observe(ctx context.Context, c config) (observation, error) {
