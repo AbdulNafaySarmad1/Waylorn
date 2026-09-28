@@ -25,4 +25,6 @@ The gateway reads one configured Modbus range and cannot request writes. It keep
 
 SIGTERM and SIGINT cancel the current read or HTTP request. A spooled batch is deleted only after API acknowledgement; any unacknowledged batch remains for restart replay with the same request ID.
 
-Replay sends at most 50 queued batches before and 50 after each read, with a five-second deadline for each replay pass. One heartbeat follows each cycle, including cycles with read or replay errors. The heartbeat queue depth counts regular `.json` spool files; symlinks are ignored. Operators should investigate a queue that does not shrink after connectivity is restored.
+Replay sends at most 50 queued batches before and 50 after each read, with a five-second deadline for each replay pass. One heartbeat follows each cycle, including cycles with read or replay errors. Replay ignores symlinks and only sends regular `.json` files. Operators should investigate a queue that does not shrink after connectivity is restored.
+
+The gateway retains API-rejected batches with status 400, 404, 409, 413, or 422 in a protected `rejected` spool subdirectory and reports an error. Later queued batches continue on subsequent cycles. The 10,000-file limit and heartbeat depth include active and rejected regular files, including incomplete temporary files. Operators must investigate and deliberately requeue or archive rejected batches; the gateway does not silently discard them.

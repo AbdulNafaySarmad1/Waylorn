@@ -265,3 +265,55 @@ func TestReplaySkipsSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPermanentRejectionIsRetainedWithoutBlockingLaterReplay(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"0001.json", "0002.json"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(`{}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	requests, reportedDepth := 0, -1
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/observations":
+			requests++
+			if requests == 1 {
+				w.WriteHeader(http.StatusConflict)
+			} else {
+				w.WriteHeader(http.StatusAccepted)
+			}
+		case "/api/v1/site-agents/heartbeat":
+			var body struct {
+				SpoolDepth int `json:"spoolDepth"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Error(err)
+			}
+			reportedDepth = body.SpoolDepth
+			w.WriteHeader(http.StatusAccepted)
+		default:
+			t.Errorf("unexpected route: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	cfg := config{spool: dir, apiURL: server.URL}
+	auth := &tokenProvider{token: "test-token", expires: time.Now().Add(time.Minute)}
+	if err := drain(context.Background(), cfg, server.Client(), auth); err == nil {
+		t.Fatal("permanent rejection was not reported")
+	}
+	if err := drain(context.Background(), cfg, server.Client(), auth); err != nil {
+		t.Fatal(err)
+	}
+	if err := sendHeartbeat(context.Background(), cfg, server.Client(), auth); err != nil {
+		t.Fatal(err)
+	}
+	active, rejected, err := spoolCounts(dir)
+	if err != nil || active != 0 || rejected != 1 || reportedDepth != 1 || requests != 2 {
+		t.Fatalf("unexpected spool state: active=%d rejected=%d depth=%d requests=%d error=%v",
+			active, rejected, reportedDepth, requests, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "rejected", "0001.json")); err != nil {
+		t.Fatal("rejected evidence was not retained:", err)
+	}
+}

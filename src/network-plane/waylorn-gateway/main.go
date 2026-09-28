@@ -54,6 +54,7 @@ type observation struct {
 }
 
 const maxReplayPerDrain = 50
+const maxSpoolFiles = 10000
 
 func main() {
 	cfg, err := loadConfig()
@@ -211,11 +212,11 @@ func pollCycle(ctx context.Context, c config, client *http.Client, auth *tokenPr
 	// Drain old local data first. If the control plane is unavailable, continue one
 	// bounded read and retain it on disk; no cloud service is needed for site I/O.
 	firstErr := timedDrain(ctx, c, client, auth)
-	entries, err := os.ReadDir(c.spool)
+	active, rejected, err := spoolCounts(c.spool)
 	if err != nil {
 		return err
 	}
-	if len(entries) >= 10000 {
+	if active+rejected >= maxSpoolFiles {
 		return errors.New("local observation spool is full; polling stopped")
 	}
 	result, err := observe(ctx, c)
@@ -238,15 +239,9 @@ func timedDrain(ctx context.Context, c config, client *http.Client, auth *tokenP
 }
 
 func sendHeartbeat(ctx context.Context, c config, client *http.Client, auth *tokenProvider) error {
-	entries, err := os.ReadDir(c.spool)
+	active, rejected, err := spoolCounts(c.spool)
 	if err != nil {
 		return err
-	}
-	depth := 0
-	for _, entry := range entries {
-		if entry.Type().IsRegular() && strings.HasSuffix(entry.Name(), ".json") {
-			depth++
-		}
 	}
 	token, err := auth.get(ctx)
 	if err != nil {
@@ -254,7 +249,7 @@ func sendHeartbeat(ctx context.Context, c config, client *http.Client, auth *tok
 	}
 	data, err := json.Marshal(map[string]any{
 		"schemaVersion": 1, "siteId": c.siteID,
-		"intervalMs": c.intervalMs, "spoolDepth": depth,
+		"intervalMs": c.intervalMs, "spoolDepth": active + rejected,
 	})
 	if err != nil {
 		return err
@@ -323,11 +318,11 @@ func newUUID() (string, error) {
 }
 
 func enqueue(dir string, value observation) error {
-	entries, err := os.ReadDir(dir)
+	active, rejected, err := spoolCounts(dir)
 	if err != nil {
 		return err
 	}
-	if len(entries) >= 10000 {
+	if active+rejected >= maxSpoolFiles {
 		return errors.New("local observation spool is full; polling stopped")
 	}
 	data, err := json.Marshal(value)
@@ -356,6 +351,39 @@ func enqueue(dir string, value observation) error {
 	}
 	name := fmt.Sprintf("%020d-%s.json", time.Now().UnixNano(), value.RequestID)
 	return os.Rename(file.Name(), filepath.Join(dir, name))
+}
+
+func spoolCounts(dir string) (active, rejected int, err error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, entry := range entries {
+		if entry.Type().IsRegular() {
+			active++
+		}
+	}
+	rejectedDir := filepath.Join(dir, "rejected")
+	info, err := os.Lstat(rejectedDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return active, 0, nil
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	if !info.IsDir() {
+		return 0, 0, errors.New("rejected spool path must be a directory")
+	}
+	entries, err = os.ReadDir(rejectedDir)
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, entry := range entries {
+		if entry.Type().IsRegular() {
+			rejected++
+		}
+	}
+	return active, rejected, nil
 }
 
 func drain(ctx context.Context, c config, client *http.Client, auth *tokenProvider) error {
@@ -405,6 +433,21 @@ func drain(ctx context.Context, c config, client *http.Client, auth *tokenProvid
 			}
 			auth.observationRetryAfter = time.Now().Add(time.Duration(min(seconds, 60)) * time.Second)
 			return errors.New("observation API rate limited replay")
+		}
+		if slices.Contains([]int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict,
+			http.StatusRequestEntityTooLarge, http.StatusUnprocessableEntity}, response.StatusCode) {
+			rejectedDir := filepath.Join(c.spool, "rejected")
+			if err := os.Mkdir(rejectedDir, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+				return err
+			}
+			info, err := os.Lstat(rejectedDir)
+			if err != nil || !info.IsDir() {
+				return errors.New("rejected spool path must be a directory")
+			}
+			if err := os.Rename(path, filepath.Join(rejectedDir, name)); err != nil {
+				return err
+			}
+			return fmt.Errorf("observation API permanently rejected %s with %d; file retained in rejected spool", name, response.StatusCode)
 		}
 		if response.StatusCode != http.StatusAccepted && response.StatusCode != http.StatusOK {
 			return fmt.Errorf("observation API returned %d: %s", response.StatusCode, body)
