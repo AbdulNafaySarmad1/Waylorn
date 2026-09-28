@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Net;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -12,6 +13,38 @@ namespace Waylorn.ControlPlane.Tests;
 
 public class ControlPlaneTests
 {
+    [Fact]
+    public async Task Identity_readiness_requires_reachable_same_origin_signing_keys()
+    {
+        const string authority = "https://id.example.test/realms/waylorn";
+        var keysUri = authority + "/protocol/openid-connect/certs";
+        var keysAvailable = true;
+        using var handler = new ReadinessHandler(request =>
+        {
+            var uri = request.RequestUri!.ToString();
+            if (uri.EndsWith("/.well-known/openid-configuration", StringComparison.Ordinal))
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent($"{{\"issuer\":\"{authority}\",\"jwks_uri\":\"{keysUri}\"}}")
+                };
+            if (uri == keysUri)
+                return new HttpResponseMessage(keysAvailable ? HttpStatusCode.OK : HttpStatusCode.ServiceUnavailable)
+                {
+                    Content = new StringContent("{\"keys\":[{\"kty\":\"RSA\"}]}")
+                };
+            throw new InvalidOperationException("Unexpected identity URL");
+        });
+        var clients = new ReadinessClientFactory(handler);
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            { ["Authentication:Authority"] = authority }).Build();
+        var probe = new IdentityReadiness(clients, config);
+        Assert.True(await probe.IsReady(CancellationToken.None));
+        keysAvailable = false;
+        Assert.False(await probe.IsReady(CancellationToken.None));
+        keysUri = "https://other.example.test/certs";
+        Assert.False(await probe.IsReady(CancellationToken.None));
+    }
+
     [Fact]
     public void Audit_signature_detects_record_change()
     {
@@ -190,4 +223,15 @@ public class ControlPlaneTests
             new Claim("sub", "user-1"), new Claim("org_id", org.ToString()),
             new Claim("site_id", site.ToString()), new Claim("waylorn_role", role)
         ], "test"));
+
+    private sealed class ReadinessClientFactory(HttpMessageHandler handler) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
+    }
+
+    private sealed class ReadinessHandler(Func<HttpRequestMessage, HttpResponseMessage> reply) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
+            Task.FromResult(reply(request));
+    }
 }

@@ -8,7 +8,7 @@ The original readiness route checked only PostgreSQL. A process could report rea
 
 ## Decision
 
-`/health/live` remains a process-only check. `/health/ready` requires PostgreSQL connectivity and a bounded live Keycloak discovery response with the configured issuer and a JWKS URI. `/health/eventing` separately verifies both required NATS JetStream streams and metadata for the audit topic in Redpanda when eventing is enabled. In local Development with eventing disabled, it returns `disabled`. Failed checks return HTTP 503 without exposing connection strings or broker addresses.
+`/health/live` remains a process-only check. `/health/ready` requires PostgreSQL connectivity and bounded live Keycloak discovery with the configured issuer, followed by a reachable nonempty JWKS on the same origin. `/health/eventing` separately verifies both required NATS JetStream streams and metadata for the audit topic in Redpanda when eventing is enabled. In local Development with eventing disabled, it returns `disabled`. Failed checks return HTTP 503 without exposing connection strings or broker addresses.
 
 The eventing route is a broker configuration and reachability signal, not a substitute for monitoring outbox age, retries, or end-to-end consumer delivery. A broker outage leaves API readiness green because queued outbox records can be retried after recovery.
 

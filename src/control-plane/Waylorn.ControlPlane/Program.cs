@@ -31,7 +31,7 @@ builder.Services.AddDbContext<WaylornDbContext>(options => options.UseNpgsql(con
 builder.Services.AddHttpClient("identity-readiness", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(3);
-    client.MaxResponseContentBufferSize = 64 * 1024;
+    client.MaxResponseContentBufferSize = 256 * 1024;
 });
 builder.Services.AddSingleton<IIdentityReadiness, IdentityReadiness>();
 builder.Services.AddSingleton<EventingReadiness>();

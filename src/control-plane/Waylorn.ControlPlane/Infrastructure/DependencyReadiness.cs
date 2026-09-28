@@ -20,15 +20,25 @@ public sealed class IdentityReadiness(IHttpClientFactory clients, IConfiguration
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(3));
-            using var response = await clients.CreateClient("identity-readiness")
+            using var client = clients.CreateClient("identity-readiness");
+            using var response = await client
                 .GetAsync(authority + "/.well-known/openid-configuration", timeout.Token);
             if (!response.IsSuccessStatusCode) return false;
             using var document = await JsonDocument.ParseAsync(
                 await response.Content.ReadAsStreamAsync(timeout.Token), cancellationToken: timeout.Token);
-            return document.RootElement.TryGetProperty("issuer", out var issuer) &&
-                issuer.GetString() == authority &&
-                document.RootElement.TryGetProperty("jwks_uri", out var keys) &&
-                !string.IsNullOrWhiteSpace(keys.GetString());
+            if (!document.RootElement.TryGetProperty("issuer", out var issuer) ||
+                issuer.GetString() != authority ||
+                !document.RootElement.TryGetProperty("jwks_uri", out var keys) ||
+                !Uri.TryCreate(keys.GetString(), UriKind.Absolute, out var keysUri) ||
+                !string.Equals(keysUri.GetLeftPart(UriPartial.Authority),
+                    new Uri(authority).GetLeftPart(UriPartial.Authority), StringComparison.OrdinalIgnoreCase))
+                return false;
+            using var keyResponse = await client.GetAsync(keysUri, timeout.Token);
+            if (!keyResponse.IsSuccessStatusCode) return false;
+            using var keyDocument = await JsonDocument.ParseAsync(
+                await keyResponse.Content.ReadAsStreamAsync(timeout.Token), cancellationToken: timeout.Token);
+            return keyDocument.RootElement.TryGetProperty("keys", out var keySet) &&
+                keySet.ValueKind == JsonValueKind.Array && keySet.GetArrayLength() > 0;
         }
         catch (Exception) when (!ct.IsCancellationRequested)
         {
