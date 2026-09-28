@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Waylorn.ControlPlane.Application;
 using Waylorn.ControlPlane.Domain;
 using Waylorn.ControlPlane.Infrastructure;
@@ -18,9 +19,12 @@ public static class ObservationEndpoints
         if (!config.GetValue("Telemetry:AcceptRawObservations", false))
             return Results.Problem(statusCode: 503, detail: "Raw telemetry ingestion is disabled at this control plane.");
         // An agent credential is scoped to exactly one site; wildcard human tokens cannot ingest.
+        var siteClaims = http.User.FindAll("site_id").ToArray();
+        var subject = AccessPolicy.Subject(http.User);
         if (!AccessPolicy.HasRole(http.User, "SiteAgent") ||
             http.User.FindFirstValue("principal_type") != "workload" ||
-            !http.User.FindAll("site_id").Any(x => x.Value == input.SiteId.ToString()))
+            siteClaims.Length != 1 || !Guid.TryParse(siteClaims[0].Value, out var allowedSite) ||
+            allowedSite != input.SiteId || subject.Length is < 1 or > 200)
             return Results.Forbid();
 
         var now = DateTimeOffset.UtcNow;
@@ -60,7 +64,9 @@ public static class ObservationEndpoints
             ExpectedIntervalMs = input.ExpectedIntervalMs
         }));
         try { await db.SaveChangesAsync(ct); }
-        catch (DbUpdateException) { return Results.Conflict(new { detail = "Observation request already exists." }); }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+            { SqlState: PostgresErrorCodes.UniqueViolation })
+        { return Results.Conflict(new { detail = "Observation request already exists." }); }
         return Results.Accepted(value: new { input.RequestId, count = input.Values.Length });
     }
 

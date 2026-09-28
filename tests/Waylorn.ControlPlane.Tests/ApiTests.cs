@@ -132,6 +132,12 @@ public class ApiTests
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/v1/site-agents/heartbeat",
             new { schemaVersion = 1, siteId = site, intervalMs = 1000, spoolDepth = 0 })).StatusCode);
         SetIdentity(client, org, site, "SiteAgent", "agent-1");
+        client.DefaultRequestHeaders.Add("X-Test-Extra-Site", Guid.NewGuid().ToString());
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/v1/site-agents/heartbeat",
+            new { schemaVersion = 1, siteId = site, intervalMs = 1000, spoolDepth = 0 })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.PostAsJsonAsync("/api/v1/observations", observation)).StatusCode);
+        client.DefaultRequestHeaders.Remove("X-Test-Extra-Site");
         Assert.Equal(HttpStatusCode.Accepted, (await client.PostAsJsonAsync("/api/v1/site-agents/heartbeat",
             new { schemaVersion = 1, siteId = site, intervalMs = 1000, spoolDepth = 0 })).StatusCode);
         Assert.Equal(HttpStatusCode.Accepted,
@@ -332,7 +338,7 @@ internal sealed class TestAuthHandler(IOptionsMonitor<AuthenticationSchemeOption
 {
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim("org_id", Request.Headers["X-Test-Org"].ToString()),
             new Claim("site_id", Request.Headers["X-Test-Site"].ToString()),
@@ -341,6 +347,8 @@ internal sealed class TestAuthHandler(IOptionsMonitor<AuthenticationSchemeOption
             new Claim("principal_type", Request.Headers["X-Test-Role"] == "SiteAgent" ? "workload" : "human"),
             new Claim("amr", "mfa")
         };
+        if (Request.Headers.TryGetValue("X-Test-Extra-Site", out var extraSite))
+            claims.Add(new Claim("site_id", extraSite.ToString()));
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, "Test")));
     }
