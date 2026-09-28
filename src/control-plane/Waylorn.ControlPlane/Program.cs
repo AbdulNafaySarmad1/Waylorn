@@ -28,6 +28,8 @@ builder.Services.AddScoped(sp =>
     return new TenantScope(principal is null ? Guid.Empty : AccessPolicy.OrganizationId(principal));
 });
 builder.Services.AddDbContext<WaylornDbContext>(options => options.UseNpgsql(connection));
+builder.Services.AddSingleton(AuditIntegrity.FromConfiguration(builder.Configuration,
+    required: !builder.Environment.IsDevelopment()));
 builder.Services.AddSingleton<AssetCache>();
 var retentionDays = builder.Configuration.GetValue("Telemetry:RetentionDays", 7);
 if (retentionDays is < 1 or > 365)

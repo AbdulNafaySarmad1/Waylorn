@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Waylorn.ControlPlane.Api;
+using Waylorn.ControlPlane.Application;
 using Waylorn.ControlPlane.Domain;
 using Waylorn.ControlPlane.Infrastructure;
 using Xunit;
@@ -10,6 +12,28 @@ namespace Waylorn.ControlPlane.Tests;
 
 public class ControlPlaneTests
 {
+    [Fact]
+    public void Audit_signature_detects_record_change()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Audit:KeyId"] = "test-v1",
+            ["Audit:SigningKey"] = Convert.ToBase64String(Enumerable.Repeat((byte)42, 32).ToArray())
+        }).Build();
+        var integrity = AuditIntegrity.FromConfiguration(config, required: true);
+        var record = new AuditRecord
+        {
+            Id = Guid.NewGuid(), OrganizationId = Guid.NewGuid(), SiteId = Guid.NewGuid(),
+            Principal = "operator", Action = "command.request", TargetType = "asset",
+            TargetId = Guid.NewGuid(), Outcome = "denied", AtUtc = DateTimeOffset.UtcNow
+        };
+        integrity.Sign(record);
+        Assert.Equal("verified", integrity.Verify(record));
+        record.Outcome = "succeeded";
+        Assert.Equal("broken", integrity.Verify(record));
+        Assert.Equal("unverified", AuditIntegrity.Disabled.Verify(record));
+    }
+
     [Fact]
     public void Access_requires_matching_organization_site_and_role()
     {

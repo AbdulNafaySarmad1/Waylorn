@@ -103,6 +103,8 @@ public sealed class AuditRecord : ITenantOwned
     public Guid TargetId { get; set; }
     public string Outcome { get; set; } = "";
     public DateTimeOffset AtUtc { get; set; }
+    public string? IntegrityKeyId { get; set; }
+    public string? IntegrityTag { get; set; }
 }
 
 // Site-local observation history. Samples are keyed by the producer request and signal

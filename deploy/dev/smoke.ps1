@@ -137,6 +137,10 @@ $auditPage = Send-Json 'GET' "/api/v1/audit?siteId=$site&limit=1" $admin $null
 if ($auditPage.StatusCode -ne 200) { throw "Audit query returned $($auditPage.StatusCode): $($auditPage.Content)" }
 $firstAudit = $auditPage.Content | ConvertFrom-Json
 if ($firstAudit.items.Count -ne 1 -or -not $firstAudit.nextCursor) { throw 'Audit pagination failed.' }
+$integrity = Send-Json 'GET' "/api/v1/audit/$($firstAudit.items[0].id)/verify" $admin $null
+if ($integrity.StatusCode -ne 200 -or ($integrity.Content | ConvertFrom-Json).state -ne 'verified') {
+    throw 'New audit record did not verify with the local signing key.'
+}
 $nextAudit = Send-Json 'GET' "/api/v1/audit?siteId=$site&limit=1&cursor=$($firstAudit.nextCursor)" $admin $null
 if ($nextAudit.StatusCode -ne 200) { throw "Audit cursor returned $($nextAudit.StatusCode): $($nextAudit.Content)" }
 if (($nextAudit.Content | ConvertFrom-Json).items[0].id -eq $firstAudit.items[0].id) { throw 'Audit cursor repeated a row.' }

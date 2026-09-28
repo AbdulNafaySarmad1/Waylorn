@@ -54,6 +54,8 @@ public class ApiTests
             host.UseSetting("ConnectionStrings:Waylorn", "Host=localhost;Database=unused");
             host.UseSetting("Telemetry:AcceptRawObservations", "true");
             host.UseSetting("Telemetry:RetentionDays", "1");
+            host.UseSetting("Audit:KeyId", "test-v1");
+            host.UseSetting("Audit:SigningKey", Convert.ToBase64String(Enumerable.Repeat((byte)42, 32).ToArray()));
             host.ConfigureTestServices(services =>
             {
                 services.RemoveAll<DbContextOptions<WaylornDbContext>>();
@@ -267,6 +269,10 @@ public class ApiTests
         var eventPayload = JsonDocument.Parse((await ownerDb.Outbox.FirstAsync()).Payload);
         Assert.Equal(1, eventPayload.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.Equal(org, eventPayload.RootElement.GetProperty("organizationId").GetGuid());
+        var audited = await ownerDb.Audit.FirstAsync(x => x.SiteId == site);
+        SetIdentity(client, org, site, "Administrator", "admin");
+        var integrity = await client.GetFromJsonAsync<JsonElement>($"/api/v1/audit/{audited.Id}/verify");
+        Assert.Equal("verified", integrity.GetProperty("state").GetString());
     }
 
     private static async Task<Guid> CreateAsset(HttpClient client, Guid site, string name, string kind = "Industrial")

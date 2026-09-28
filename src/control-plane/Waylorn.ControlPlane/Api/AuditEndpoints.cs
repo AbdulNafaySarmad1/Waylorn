@@ -10,6 +10,7 @@ public static class AuditEndpoints
     {
         api.MapGet("/audit", ListAudit);
         api.MapGet("/audit/{id:guid}", GetAudit);
+        api.MapGet("/audit/{id:guid}/verify", VerifyAudit);
     }
 
     private static async Task<IResult> ListAudit(Guid? siteId, Guid? targetId, string? cursor, int? limit,
@@ -57,5 +58,16 @@ public static class AuditEndpoints
         return row.SiteId is { } site && AccessPolicy.HasSite(http.User, site) ||
             row.SiteId is null && http.User.FindAll("site_id").Any(x => x.Value == "*")
             ? Results.Ok(row) : Results.Forbid();
+    }
+
+    private static async Task<IResult> VerifyAudit(Guid id, HttpContext http, WaylornDbContext db, CancellationToken ct)
+    {
+        if (!AccessPolicy.HasRole(http.User, "Administrator") || db.OrganizationId == Guid.Empty)
+            return Results.Forbid();
+        var row = await db.Audit.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
+        if (row is null || row.SiteId is { } site && !AccessPolicy.HasSite(http.User, site) ||
+            row.SiteId is null && !http.User.FindAll("site_id").Any(x => x.Value == "*"))
+            return Results.NotFound();
+        return Results.Ok(new { row.Id, state = db.Integrity.Verify(row), row.IntegrityKeyId });
     }
 }

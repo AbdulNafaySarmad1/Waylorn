@@ -13,8 +13,10 @@ public static class AuditWriter
         {
             Id = Guid.NewGuid(), OrganizationId = db.OrganizationId, SiteId = siteId,
             Principal = principal, Action = action, TargetType = targetType,
-            TargetId = targetId, Outcome = outcome, AtUtc = DateTimeOffset.UtcNow
+            TargetId = targetId, Outcome = outcome,
+            AtUtc = new DateTimeOffset(DateTime.UtcNow.Ticks / 10 * 10, TimeSpan.Zero)
         };
+        db.Integrity.Sign(record);
         db.Audit.Add(record);
         db.Outbox.Add(new OutboxMessage
         {
@@ -22,7 +24,7 @@ public static class AuditWriter
             Destination = OutboxDestination.Audit, Subject = "waylorn.audit.v1",
             Payload = JsonSerializer.Serialize(new { schemaVersion = 1, eventId = record.Id, record.OrganizationId,
                 record.SiteId, record.Principal, record.Action, record.TargetType, record.TargetId,
-                record.Outcome, record.AtUtc }, EventJson.Options),
+                record.Outcome, record.AtUtc, record.IntegrityKeyId, record.IntegrityTag }, EventJson.Options),
             CreatedUtc = record.AtUtc, NextAttemptUtc = record.AtUtc
         });
     }

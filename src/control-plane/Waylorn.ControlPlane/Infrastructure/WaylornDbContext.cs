@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Waylorn.ControlPlane.Application;
 using Waylorn.ControlPlane.Domain;
 
 namespace Waylorn.ControlPlane.Infrastructure;
@@ -8,8 +9,21 @@ public sealed class TenantScope(Guid organizationId)
     public Guid OrganizationId { get; } = organizationId;
 }
 
-public sealed class WaylornDbContext(DbContextOptions<WaylornDbContext> options, TenantScope scope) : DbContext(options)
+public sealed class WaylornDbContext : DbContext
 {
+    private readonly TenantScope scope;
+    public AuditIntegrity Integrity { get; }
+
+    public WaylornDbContext(DbContextOptions<WaylornDbContext> options, TenantScope scope,
+        AuditIntegrity integrity) : base(options)
+    {
+        this.scope = scope;
+        Integrity = integrity;
+    }
+
+    public WaylornDbContext(DbContextOptions<WaylornDbContext> options, TenantScope scope)
+        : this(options, scope, AuditIntegrity.Disabled) { }
+
     public Guid OrganizationId => scope.OrganizationId;
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<Site> Sites => Set<Site>();
@@ -117,6 +131,8 @@ public sealed class WaylornDbContext(DbContextOptions<WaylornDbContext> options,
             e.Property(x => x.Action).HasMaxLength(100);
             e.Property(x => x.TargetType).HasMaxLength(100);
             e.Property(x => x.Outcome).HasMaxLength(100);
+            e.Property(x => x.IntegrityKeyId).HasMaxLength(40);
+            e.Property(x => x.IntegrityTag).HasMaxLength(64);
             e.HasIndex(x => new { x.OrganizationId, x.AtUtc });
             e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
         });

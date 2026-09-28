@@ -44,6 +44,14 @@ $mappers = @(
 foreach ($attribute in @('org_id', 'site_id', 'waylorn_role', 'principal_type')) {
     $mappers += @{ name = "waylorn-$attribute"; protocol = 'openid-connect'; protocolMapper = 'oidc-usermodel-attribute-mapper'; config = @{ 'user.attribute' = $attribute; 'claim.name' = $attribute; 'jsonType.label' = 'String'; 'access.token.claim' = 'true'; 'id.token.claim' = 'false'; 'multivalued' = 'false' } }
 }
+if (-not $settings.ContainsKey('WAYLORN_AUDIT_KEY_ID')) {
+    $settings.WAYLORN_AUDIT_KEY_ID = 'local-v1'
+    Add-Content -LiteralPath $envPath -Value "WAYLORN_AUDIT_KEY_ID=$($settings.WAYLORN_AUDIT_KEY_ID)"
+}
+if (-not $settings.ContainsKey('WAYLORN_AUDIT_SIGNING_KEY')) {
+    $settings.WAYLORN_AUDIT_SIGNING_KEY = [Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+    Add-Content -LiteralPath $envPath -Value "WAYLORN_AUDIT_SIGNING_KEY=$($settings.WAYLORN_AUDIT_SIGNING_KEY)"
+}
 
 $clients = @(Invoke-RestMethod -Uri "$BaseUrl/admin/realms/waylorn/clients?clientId=waylorn-api" -Headers $headers | Where-Object { $_.clientId -eq 'waylorn-api' })
 if ($clients.Count -eq 0) {
