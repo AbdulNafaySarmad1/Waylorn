@@ -54,8 +54,19 @@ type observation struct {
 	Values             []sample  `json:"values"`
 }
 
+type identity struct {
+	SchemaVersion int    `json:"schemaVersion"`
+	VendorName    string `json:"vendorName"`
+	ProductCode   string `json:"productCode"`
+	Revision      string `json:"revision"`
+}
+
 const maxReplayPerDrain = 50
 const maxSpoolFiles = 10000
+
+// Identification is one extra read request per hour against the configured endpoint only;
+// the gateway never probes other addresses.
+const identifyEvery = time.Hour
 
 func main() {
 	cfg, err := loadConfig()
@@ -72,7 +83,13 @@ func main() {
 	auth := &tokenProvider{client: client, cfg: cfg}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	identifyDevice := func() {
+		if err := reportIdentity(ctx, cfg, client, auth); err != nil && ctx.Err() == nil {
+			log.Printf("device identification: %v", err)
+		}
+	}
 	if len(os.Args) == 2 && os.Args[1] == "--once" {
+		identifyDevice()
 		if _, err := runCycle(ctx, cfg, client, auth); err != nil && ctx.Err() == nil {
 			log.Fatal(err)
 		}
@@ -83,7 +100,13 @@ func main() {
 	}
 	ticker := time.NewTicker(time.Duration(cfg.intervalMs) * time.Millisecond)
 	defer ticker.Stop()
+	var identified time.Time
 	for {
+		// A device without identification support fails once an hour, not every cycle.
+		if time.Since(identified) >= identifyEvery {
+			identifyDevice()
+			identified = time.Now()
+		}
 		assigned, err := runCycle(ctx, cfg, client, auth)
 		if err != nil && ctx.Err() == nil {
 			log.Printf("observation cycle: %v", err)
@@ -325,6 +348,62 @@ func observe(ctx context.Context, c config) (observation, error) {
 	return observation{SchemaVersion: 1, RequestID: id, SiteID: c.siteID, AssetID: c.assetID,
 		Source: "site-agent/modbus-tcp", ObservedUtc: time.Now().UTC(),
 		ExpectedIntervalMs: c.intervalMs, Values: values}, nil
+}
+
+// reportIdentity sends the configured device's self-reported identity to the control plane as a
+// discovery claim. The claim is reconciled by a site administrator; it grants nothing.
+func reportIdentity(ctx context.Context, c config, client *http.Client, auth *tokenProvider) error {
+	readCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(readCtx, c.reader, "identify", c.endpoint, strconv.Itoa(c.unit)).Output()
+	if err != nil {
+		return fmt.Errorf("read-only OT identification failed: %w", err)
+	}
+	if len(output) > 4096 {
+		return errors.New("OT identity exceeds size limit")
+	}
+	var found identity
+	if err := json.Unmarshal(output, &found); err != nil {
+		return err
+	}
+	for _, value := range []string{found.VendorName, found.ProductCode, found.Revision} {
+		if len(value) < 1 || len(value) > 64 || strings.ContainsFunc(value, func(r rune) bool {
+			return r < ' ' || r > '~' || r == '"' || r == '\\'
+		}) {
+			return errors.New("OT identity contract mismatch")
+		}
+	}
+	if found.SchemaVersion != 1 {
+		return errors.New("OT identity contract mismatch")
+	}
+	token, err := auth.get(ctx)
+	if err != nil {
+		return err
+	}
+	data, err := json.Marshal(map[string]any{
+		"schemaVersion": 1, "siteId": c.siteID, "endpoint": c.endpoint, "unitId": c.unit,
+		"vendorName": found.VendorName, "productCode": found.ProductCode, "revision": found.Revision,
+	})
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiURL+"/api/v1/discovery/claims",
+		bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	response, err := client.Do(request)
+	if err != nil {
+		return err
+	}
+	io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+	response.Body.Close()
+	if response.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("discovery claim API returned %d", response.StatusCode)
+	}
+	return nil
 }
 
 func newUUID() (string, error) {

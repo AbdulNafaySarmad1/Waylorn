@@ -51,6 +51,9 @@ Set `Cache:Endpoint` to enable Valkey for 30-second asset-detail reads. Authoriz
 | `GET /api/v1/audit` | Administrator-only, site-scoped audit rows with optional target filter and stable cursor pagination (up to 100). |
 | `GET /api/v1/audit/{id}` | Administrator-only record lookup with tenant/site enforcement. |
 | `GET /api/v1/audit/{id}/verify` | Administrator-only HMAC check of an individual record: verified, unverified, or broken. |
+| `POST /api/v1/discovery/claims` | Site agent reports the identity of its configured endpoint; stored as a pending claim with at most one proposed asset (ADR 0036). |
+| `GET /api/v1/discovery/claims?siteId=` | Site-scoped claim listing. |
+| `POST /api/v1/discovery/claims/{id}/reconcile` | Human site administrator links, creates, or rejects a claim, using its current version; audited. |
 | `POST /api/v1/egress/destinations` | Organization-wide administrator with MFA registers an egress destination; it starts with a deny-all policy (ADR 0035). |
 | `POST /api/v1/egress/decisions` | Classified default-deny decision for a proposed transfer; every decision is recorded and audited. |
 | `GET /api/v0/orgs/{orgId}/ai/providers`, `/ai/policies`, `/ai/egress`; `PUT /ai/policies/{id}` | Contract views of destinations, policies, and the egress log; policy changes need `If-Match` and MFA. |

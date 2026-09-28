@@ -289,3 +289,28 @@ public sealed class EgressRecord : ITenantOwned
     public int Bytes { get; set; }
     public int RedactedFieldCount { get; set; }
 }
+
+public enum DiscoveryClaimState { Pending, Linked, Rejected }
+
+// What a site agent reported about the endpoint it is configured to read. A claim never changes the
+// inventory by itself; a site administrator links it to an asset, creates one from it, or rejects it.
+public sealed class DiscoveryClaim : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid SiteId { get; set; }
+    public string Source { get; set; } = "";
+    public string Endpoint { get; set; } = "";
+    public int UnitId { get; set; }
+    public string VendorName { get; set; } = "";
+    public string ProductCode { get; set; } = "";
+    public string Revision { get; set; } = "";
+    public DiscoveryClaimState State { get; set; }
+    // The single site asset with the same vendor and product, proposed for review; never auto-linked.
+    public Guid? CandidateAssetId { get; set; }
+    public Guid? AssetId { get; set; }
+    public DateTime FirstSeenUtc { get; set; }
+    public DateTime LastSeenUtc { get; set; }
+    public string? ReviewedBy { get; set; }
+    public long Version { get; set; } = 1;
+}

@@ -139,6 +139,7 @@ api.MapSiteAgentEndpoints();
 api.MapIncidentEndpoints();
 api.MapMaintenanceEndpoints();
 api.MapEgressEndpoints();
+api.MapDiscoveryEndpoints();
 app.Run();
 
 public partial class Program;

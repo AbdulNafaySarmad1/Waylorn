@@ -41,6 +41,7 @@ public sealed class WaylornDbContext : DbContext
     public DbSet<EgressDestination> EgressDestinations => Set<EgressDestination>();
     public DbSet<EgressPolicy> EgressPolicies => Set<EgressPolicy>();
     public DbSet<EgressRecord> EgressRecords => Set<EgressRecord>();
+    public DbSet<DiscoveryClaim> DiscoveryClaims => Set<DiscoveryClaim>();
 
     public DbSet<AuditChainHead> AuditHeads => Set<AuditChainHead>();
 
@@ -289,6 +290,22 @@ public sealed class WaylornDbContext : DbContext
             e.Property(x => x.Actor).HasMaxLength(200);
             e.Property(x => x.ActorType).HasMaxLength(20);
             e.HasIndex(x => new { x.OrganizationId, x.AtUtc });
+            e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
+        });
+        model.Entity<DiscoveryClaim>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasOne<Site>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.SiteId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.Property(x => x.Source).HasMaxLength(200);
+            e.Property(x => x.Endpoint).HasMaxLength(64);
+            e.Property(x => x.VendorName).HasMaxLength(64);
+            e.Property(x => x.ProductCode).HasMaxLength(64);
+            e.Property(x => x.Revision).HasMaxLength(64);
+            e.Property(x => x.State).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.ReviewedBy).HasMaxLength(200);
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.HasIndex(x => new { x.OrganizationId, x.SiteId, x.Source, x.Endpoint, x.UnitId }).IsUnique();
             e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
         });
         model.Entity<OutboxMessage>(e =>

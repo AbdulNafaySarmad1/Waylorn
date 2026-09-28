@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -334,5 +335,52 @@ func TestPermanentRejectionIsRetainedWithoutBlockingLaterReplay(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "rejected", "0001.json")); err != nil {
 		t.Fatal("rejected evidence was not retained:", err)
+	}
+}
+
+func TestDeviceIdentityIsReportedAsDiscoveryClaim(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses a POSIX shell script")
+	}
+	reader := filepath.Join(t.TempDir(), "reader")
+	script := "#!/bin/sh\n[ \"$1 $2 $3\" = 'identify 127.0.0.1:1502 7' ] || exit 3\n" +
+		"printf '{\"schemaVersion\":1,\"vendorName\":\"Acme\",\"productCode\":\"PLC-42\",\"revision\":\"1.20\"}'\n"
+	if err := os.WriteFile(reader, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	var claim map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/discovery/claims" || r.Header.Get("Authorization") != "Bearer test-token" {
+			t.Errorf("unexpected claim request: %s", r.URL.Path)
+		}
+		json.NewDecoder(r.Body).Decode(&claim)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+	cfg := config{apiURL: server.URL, siteID: "test-site", reader: reader, endpoint: "127.0.0.1:1502", unit: 7}
+	auth := &tokenProvider{token: "test-token", expires: time.Now().Add(time.Minute)}
+	if err := reportIdentity(context.Background(), cfg, server.Client(), auth); err != nil {
+		t.Fatal(err)
+	}
+	if claim["vendorName"] != "Acme" || claim["productCode"] != "PLC-42" || claim["revision"] != "1.20" ||
+		claim["endpoint"] != "127.0.0.1:1502" || claim["unitId"] != float64(7) || claim["siteId"] != "test-site" {
+		t.Fatalf("unexpected claim: %v", claim)
+	}
+
+	// A reader result that could smuggle quotes or control characters is refused before any request.
+	for _, vendor := range []string{`Ac\"me`, `Ac\u0007me`} {
+		unsafe := filepath.Join(t.TempDir(), "identity.json")
+		body := `{"schemaVersion":1,"vendorName":"` + vendor + `","productCode":"P","revision":"1"}`
+		if err := os.WriteFile(unsafe, []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(reader, []byte("#!/bin/sh\ncat '"+unsafe+"'\n"), 0700); err != nil {
+			t.Fatal(err)
+		}
+		claim = nil
+		if err := reportIdentity(context.Background(), cfg, server.Client(), auth); err == nil || claim != nil ||
+			!strings.Contains(err.Error(), "contract mismatch") {
+			t.Fatalf("unsafe identity %s: error %v, claim %v", vendor, err, claim)
+		}
 	}
 }

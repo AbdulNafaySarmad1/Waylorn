@@ -360,28 +360,8 @@ public class ApiTests
     public async Task Egress_is_denied_by_default_and_follows_the_classified_policy()
     {
         await using var sqlite = new SqliteConnection("Data Source=:memory:");
-        await sqlite.OpenAsync();
-        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
-        {
-            host.UseSetting("Authentication:Authority", "https://keycloak.example.test/realms/waylorn");
-            host.UseSetting("Authentication:Audience", "waylorn-api");
-            host.UseSetting("ConnectionStrings:Waylorn", "Host=localhost;Database=unused");
-            host.ConfigureTestServices(services =>
-            {
-                services.RemoveAll<DbContextOptions<WaylornDbContext>>();
-                services.RemoveAll<IDbContextOptionsConfiguration<WaylornDbContext>>();
-                services.AddDbContext<WaylornDbContext>(options => options.UseSqlite(sqlite));
-                services.AddAuthentication(options =>
-                {
-                    options.DefaultAuthenticateScheme = "Test";
-                    options.DefaultChallengeScheme = "Test";
-                    options.DefaultForbidScheme = "Test";
-                }).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", _ => { });
-            });
-        });
+        using var factory = await SqliteFactory(sqlite);
         using var client = factory.CreateClient();
-        using (var scope = factory.Services.CreateScope())
-            await scope.ServiceProvider.GetRequiredService<WaylornDbContext>().Database.EnsureCreatedAsync();
         var org = Guid.NewGuid();
         void As(string role, string subject, bool mfa = true, bool orgWide = true)
         {
@@ -464,6 +444,122 @@ public class ApiTests
         Assert.Equal("viewer", latest.GetProperty("actor").GetProperty("subject").GetString());
         var providers = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/ai/providers");
         Assert.Equal("confidential", providers.GetProperty("items")[0].GetProperty("classificationCeiling").GetString());
+    }
+
+    [Fact]
+    public async Task Discovery_claims_are_proposed_and_only_reconciled_by_a_site_administrator()
+    {
+        await using var sqlite = new SqliteConnection("Data Source=:memory:");
+        using var factory = await SqliteFactory(sqlite);
+        using var client = factory.CreateClient();
+        var org = Guid.NewGuid();
+        var site = Guid.NewGuid();
+        SetIdentity(client, org, site, "Administrator", "admin");
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/api/v1/organization",
+            new { slug = "discovery-org", name = "Discovery Organization" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/api/v1/sites",
+            new { id = site, code = "DISC-1", name = "Discovery Plant", regionName = "Region", timezone = "UTC", environment = "lab" })).StatusCode);
+        async Task<Guid> Asset(string name)
+        {
+            var created = await client.PostAsJsonAsync("/api/v1/assets",
+                new { siteId = site, kind = "Industrial", name, manufacturer = "Acme", model = "PLC-42" });
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+            return (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        }
+        var plc = await Asset("Line 1 PLC");
+        object Claim(string endpoint, string revision = "1.20", string vendor = "Acme") => new
+        {
+            schemaVersion = 1, siteId = site, endpoint, unitId = 1, vendorName = vendor, productCode = "PLC-42", revision
+        };
+        async Task<JsonElement> Report(object claim)
+        {
+            var response = await client.PostAsJsonAsync("/api/v1/discovery/claims", claim);
+            Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+            return await response.Content.ReadFromJsonAsync<JsonElement>();
+        }
+        async Task<HttpResponseMessage> Reconcile(Guid id, object body) =>
+            await client.PostAsJsonAsync($"/api/v1/discovery/claims/{id}/reconcile", body);
+        async Task<long> Version(Guid id) =>
+            (await client.GetFromJsonAsync<JsonElement>($"/api/v1/discovery/claims?siteId={site}")).GetProperty("items")
+                .EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == id).GetProperty("version").GetInt64();
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/v1/discovery/claims", Claim("127.0.0.1:15020"))).StatusCode);
+        SetIdentity(client, org, site, "SiteAgent", "agent-1");
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/v1/discovery/claims", Claim("plc.local:502"))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/v1/discovery/claims",
+            Claim("127.0.0.1:15020", vendor: "Ac\"me"))).StatusCode);
+        var first = await Report(Claim("127.0.0.1:15020"));
+        var claimId = first.GetProperty("id").GetGuid();
+        Assert.Equal("Pending", first.GetProperty("state").GetString());
+        Assert.Equal(plc, first.GetProperty("candidateAssetId").GetGuid());
+
+        SetIdentity(client, org, site, "Viewer", "viewer");
+        Assert.Equal(HttpStatusCode.Forbidden, (await Reconcile(claimId, new { action = "reject", version = 0 })).StatusCode);
+        SetIdentity(client, org, site, "Administrator", "admin");
+        Assert.Equal(HttpStatusCode.Conflict, (await Reconcile(claimId, new { action = "link", version = 0, assetId = plc })).StatusCode);
+        var linked = await Reconcile(claimId, new { action = "link", version = await Version(claimId), assetId = plc });
+        Assert.Equal(HttpStatusCode.OK, linked.StatusCode);
+        Assert.Equal("Linked", (await linked.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("state").GetString());
+        var options = new DbContextOptionsBuilder<WaylornDbContext>().UseSqlite(sqlite).Options;
+        await using (var db = new WaylornDbContext(options, new TenantScope(org)))
+            Assert.Equal("1.20", (await db.Assets.SingleAsync(x => x.Id == plc)).Firmware);
+
+        SetIdentity(client, org, site, "SiteAgent", "agent-1");
+        Assert.Equal("Linked", (await Report(Claim("127.0.0.1:15020"))).GetProperty("state").GetString());
+        // New firmware on a linked device reopens review instead of silently changing the inventory.
+        var drifted = await Report(Claim("127.0.0.1:15020", revision: "1.30"));
+        Assert.Equal("Pending", drifted.GetProperty("state").GetString());
+        Assert.Equal(plc, drifted.GetProperty("candidateAssetId").GetGuid());
+        await using (var db = new WaylornDbContext(options, new TenantScope(org)))
+            Assert.Equal("1.20", (await db.Assets.SingleAsync(x => x.Id == plc)).Firmware);
+
+        SetIdentity(client, org, site, "Administrator", "admin");
+        await Asset("Line 2 PLC");
+        SetIdentity(client, org, site, "SiteAgent", "agent-1");
+        // Two identical models in the site: nothing is proposed, and the network address is never used to choose.
+        var ambiguous = await Report(Claim("127.0.0.1:15021"));
+        Assert.False(ambiguous.TryGetProperty("candidateAssetId", out _)); // null values are omitted
+        var rejectedClaim = (await Report(Claim("127.0.0.1:15022"))).GetProperty("id").GetGuid();
+
+        SetIdentity(client, org, site, "Administrator", "admin");
+        var ambiguousId = ambiguous.GetProperty("id").GetGuid();
+        var created = await Reconcile(ambiguousId, new { action = "create", version = await Version(ambiguousId), name = "Line 3 PLC" });
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        var newAsset = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("assetId").GetGuid();
+        var rejected = await Reconcile(rejectedClaim, new { action = "reject", version = await Version(rejectedClaim) });
+        Assert.Equal("Rejected", (await rejected.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("state").GetString());
+        await using (var db = new WaylornDbContext(options, new TenantScope(org)))
+        {
+            var asset = await db.Assets.SingleAsync(x => x.Id == newAsset);
+            Assert.Equal(("Acme", "PLC-42", "1.20"), (asset.Manufacturer, asset.Model, asset.Firmware));
+            Assert.Equal(3, await db.Assets.CountAsync());
+        }
+    }
+
+    private static async Task<WebApplicationFactory<Program>> SqliteFactory(SqliteConnection sqlite)
+    {
+        await sqlite.OpenAsync();
+        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
+        {
+            host.UseSetting("Authentication:Authority", "https://keycloak.example.test/realms/waylorn");
+            host.UseSetting("Authentication:Audience", "waylorn-api");
+            host.UseSetting("ConnectionStrings:Waylorn", "Host=localhost;Database=unused");
+            host.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<WaylornDbContext>>();
+                services.RemoveAll<IDbContextOptionsConfiguration<WaylornDbContext>>();
+                services.AddDbContext<WaylornDbContext>(options => options.UseSqlite(sqlite));
+                services.AddAuthentication(options =>
+                {
+                    options.DefaultAuthenticateScheme = "Test";
+                    options.DefaultChallengeScheme = "Test";
+                    options.DefaultForbidScheme = "Test";
+                }).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", _ => { });
+            });
+        });
+        using var scope = factory.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<WaylornDbContext>().Database.EnsureCreatedAsync();
+        return factory;
     }
 
     private static async Task<Guid> CreateAsset(HttpClient client, Guid site, string name, string kind = "Industrial")

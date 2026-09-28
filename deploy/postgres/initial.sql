@@ -657,3 +657,47 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928083839_AddDiscoveryClaims') THEN
+    CREATE TABLE "DiscoveryClaims" (
+        "Id" uuid NOT NULL,
+        "OrganizationId" uuid NOT NULL,
+        "SiteId" uuid NOT NULL,
+        "Source" character varying(200) NOT NULL,
+        "Endpoint" character varying(64) NOT NULL,
+        "UnitId" integer NOT NULL,
+        "VendorName" character varying(64) NOT NULL,
+        "ProductCode" character varying(64) NOT NULL,
+        "Revision" character varying(64) NOT NULL,
+        "State" character varying(16) NOT NULL,
+        "CandidateAssetId" uuid,
+        "AssetId" uuid,
+        "FirstSeenUtc" timestamp with time zone NOT NULL,
+        "LastSeenUtc" timestamp with time zone NOT NULL,
+        "ReviewedBy" character varying(200),
+        "Version" bigint NOT NULL,
+        CONSTRAINT "PK_DiscoveryClaims" PRIMARY KEY ("Id"),
+        CONSTRAINT "FK_DiscoveryClaims_Sites_OrganizationId_SiteId" FOREIGN KEY ("OrganizationId", "SiteId") REFERENCES "Sites" ("OrganizationId", "Id") ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928083839_AddDiscoveryClaims') THEN
+    CREATE UNIQUE INDEX "IX_DiscoveryClaims_OrganizationId_SiteId_Source_Endpoint_UnitId" ON "DiscoveryClaims" ("OrganizationId", "SiteId", "Source", "Endpoint", "UnitId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928083839_AddDiscoveryClaims') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260928083839_AddDiscoveryClaims', '10.0.9');
+    END IF;
+END $EF$;
+COMMIT;
+
