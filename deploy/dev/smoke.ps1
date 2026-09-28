@@ -5,11 +5,40 @@ foreach ($line in Get-Content -LiteralPath (Join-Path $PSScriptRoot '.env')) {
     if ($line -match '^([^#=]+)=(.*)$') { $settings[$matches[1]] = $matches[2] }
 }
 
-function Get-TestToken([string]$username, [string]$password) {
+function Get-TestToken([string]$username, [string]$password, [string]$totp = '') {
+    $body = @{ client_id = 'waylorn-api'; grant_type = 'password'; username = $username; password = $password }
+    if ($totp) { $body.totp = $totp }
     $result = Invoke-RestMethod -Uri "$Keycloak/realms/waylorn/protocol/openid-connect/token" `
-        -Method Post -ContentType 'application/x-www-form-urlencoded' `
-        -Body @{ client_id = 'waylorn-api'; grant_type = 'password'; username = $username; password = $password }
+        -Method Post -ContentType 'application/x-www-form-urlencoded' -Body $body
     return $result.access_token
+}
+
+# RFC 6238 code for Keycloak's seeded TOTP credential (HMAC-SHA1, 6 digits, 30 s; key = secret's UTF-8 bytes).
+function Get-Totp([string]$secret, [long]$step) {
+    $counter = [BitConverter]::GetBytes($step)
+    if ([BitConverter]::IsLittleEndian) { [Array]::Reverse($counter) }
+    $hash = [System.Security.Cryptography.HMACSHA1]::HashData([Text.Encoding]::UTF8.GetBytes($secret), $counter)
+    $offset = $hash[19] -band 15
+    # Widen before shifting: PowerShell keeps a shifted [byte] in the byte range.
+    $value = (([int]$hash[$offset] -band 127) -shl 24) -bor ([int]$hash[$offset + 1] -shl 16) -bor ([int]$hash[$offset + 2] -shl 8) -bor [int]$hash[$offset + 3]
+    return ($value % 1000000).ToString('D6')
+}
+
+# Keycloak rejects a reused code, so a rerun inside the same 30 s window waits for the next one.
+function Get-MfaToken([string]$username, [string]$password, [string]$secret) {
+    foreach ($attempt in 1..2) {
+        try { return Get-TestToken $username $password (Get-Totp $secret ([long][Math]::Floor([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() / 30))) }
+        catch {
+            if ($attempt -eq 2) { throw }
+            Start-Sleep -Seconds (31 - [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() % 30)
+        }
+    }
+}
+
+function Get-AmrClaim([string]$token) {
+    $payload = $token.Split('.')[1].Replace('-', '+').Replace('_', '/')
+    $payload += '=' * ((4 - $payload.Length % 4) % 4)
+    return @(([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payload)) | ConvertFrom-Json).amr)
 }
 
 function Send-Json([string]$method, [string]$path, [string]$token, $body, [hashtable]$extra = @{}) {
@@ -21,7 +50,15 @@ function Send-Json([string]$method, [string]$path, [string]$token, $body, [hasht
 }
 
 $admin = Get-TestToken 'waylorn-admin' $settings.WAYLORN_TEST_ADMIN_PASSWORD
-$approver = Get-TestToken 'waylorn-approver' $settings.WAYLORN_TEST_APPROVER_PASSWORD
+try {
+    $null = Get-TestToken 'waylorn-approver' $settings.WAYLORN_TEST_APPROVER_PASSWORD
+    throw 'The TOTP approver obtained a token with a password alone.'
+}
+catch { if ($_.Exception.Message -like 'The TOTP approver*') { throw } }
+$approver = Get-MfaToken 'waylorn-approver' $settings.WAYLORN_TEST_APPROVER_PASSWORD $settings.WAYLORN_TEST_APPROVER_TOTP_SECRET
+if ((Get-AmrClaim $approver) -notcontains 'otp') { throw 'The TOTP approver token has no otp amr claim.' }
+$passwordApprover = Get-TestToken 'waylorn-password-approver' $settings.WAYLORN_TEST_PASSWORD_APPROVER_PASSWORD
+if ((Get-AmrClaim $passwordApprover) -contains 'otp') { throw 'The password-only approver token claims otp.' }
 $site = $settings.WAYLORN_TEST_SITE_ID
 $ready = Invoke-WebRequest -Uri "$Api/health/ready" -SkipHttpErrorCheck
 if ($ready.StatusCode -ne 200) { throw "Readiness returned $($ready.StatusCode)." }
@@ -113,11 +150,17 @@ $request = Send-Json 'POST' '/api/v1/commands' $admin @{
 } @{ 'Idempotency-Key' = "smoke-$([Guid]::NewGuid())" }
 if ($request.StatusCode -ne 201) { throw "Command request returned $($request.StatusCode): $($request.Content)" }
 $commandId = ($request.Content | ConvertFrom-Json).id
-$approval = Send-Json 'POST' "/api/v1/commands/$commandId/approve" $approver $null
+$approval = Send-Json 'POST' "/api/v1/commands/$commandId/approve" $passwordApprover $null
 if ($approval.StatusCode -ne 403) { throw "Password-only AMBER approval returned $($approval.StatusCode): $($approval.Content)" }
 $pending = Send-Json 'GET' "/api/v1/commands/$commandId" $approver $null
 if ($pending.StatusCode -ne 200 -or ($pending.Content | ConvertFrom-Json).state -ne 'Pending') {
     throw 'Password-only approval changed the pending command.'
+}
+$approval = Send-Json 'POST' "/api/v1/commands/$commandId/approve" $approver $null
+if ($approval.StatusCode -ne 200) { throw "TOTP AMBER approval returned $($approval.StatusCode): $($approval.Content)" }
+$approved = Send-Json 'GET' "/api/v1/commands/$commandId" $approver $null
+if ($approved.StatusCode -ne 200 -or ($approved.Content | ConvertFrom-Json).state -ne 'Approved') {
+    throw 'TOTP approval did not record the approval.'
 }
 
 $red = Send-Json 'POST' '/api/v1/commands' $admin @{
