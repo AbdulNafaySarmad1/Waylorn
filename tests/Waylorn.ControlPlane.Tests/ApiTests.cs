@@ -279,6 +279,10 @@ public class ApiTests
         var selfApproval = await client.PostAsync($"/api/v1/commands/{commandId}/approve", null);
         Assert.Equal(HttpStatusCode.Conflict, selfApproval.StatusCode);
         Assert.Equal("application/problem+json", selfApproval.Content.Headers.ContentType?.MediaType);
+        SetIdentity(client, org, site, "Approver", "approver", strongAuthentication: false);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync($"/api/v1/commands/{commandId}/approve", null)).StatusCode);
+        var pendingForStepUp = await client.GetFromJsonAsync<JsonElement>($"/api/v1/commands/{commandId}");
+        Assert.Equal("Pending", pendingForStepUp.GetProperty("state").GetString());
         SetIdentity(client, org, site, "Approver", "approver");
         var approved = await client.PostAsync($"/api/v1/commands/{commandId}/approve", null);
         Assert.Equal(HttpStatusCode.OK, approved.StatusCode);
@@ -300,9 +304,9 @@ public class ApiTests
         Assert.Equal(0, await db.Commands.CountAsync());
         var options = new DbContextOptionsBuilder<WaylornDbContext>().UseSqlite(sqlite).Options;
         await using var ownerDb = new WaylornDbContext(options, new TenantScope(org));
-        Assert.Equal(21, await ownerDb.Audit.CountAsync());
+        Assert.Equal(22, await ownerDb.Audit.CountAsync());
         Assert.Single(await ownerDb.Commands.ToListAsync());
-        Assert.Equal(21, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Audit));
+        Assert.Equal(22, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Audit));
         Assert.Equal(2, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Control));
         Assert.Equal(4, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Operations));
         var eventPayload = JsonDocument.Parse((await ownerDb.Outbox.FirstAsync()).Payload);
@@ -333,16 +337,19 @@ public class ApiTests
         return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
     }
 
-    private static void SetIdentity(HttpClient client, Guid org, Guid site, string role, string subject)
+    private static void SetIdentity(HttpClient client, Guid org, Guid site, string role, string subject,
+        bool strongAuthentication = true)
     {
         client.DefaultRequestHeaders.Remove("X-Test-Org");
         client.DefaultRequestHeaders.Remove("X-Test-Site");
         client.DefaultRequestHeaders.Remove("X-Test-Role");
         client.DefaultRequestHeaders.Remove("X-Test-Subject");
+        client.DefaultRequestHeaders.Remove("X-Test-Amr");
         client.DefaultRequestHeaders.Add("X-Test-Org", org.ToString());
         client.DefaultRequestHeaders.Add("X-Test-Site", site.ToString());
         client.DefaultRequestHeaders.Add("X-Test-Role", role);
         client.DefaultRequestHeaders.Add("X-Test-Subject", subject);
+        if (strongAuthentication) client.DefaultRequestHeaders.Add("X-Test-Amr", "mfa");
     }
 }
 
@@ -363,9 +370,10 @@ internal sealed class TestAuthHandler(IOptionsMonitor<AuthenticationSchemeOption
             new Claim("site_id", Request.Headers["X-Test-Site"].ToString()),
             new Claim("waylorn_role", Request.Headers["X-Test-Role"].ToString()),
             new Claim("sub", Request.Headers["X-Test-Subject"].ToString()),
-            new Claim("principal_type", Request.Headers["X-Test-Role"] == "SiteAgent" ? "workload" : "human"),
-            new Claim("amr", "mfa")
+            new Claim("principal_type", Request.Headers["X-Test-Role"] == "SiteAgent" ? "workload" : "human")
         };
+        if (Request.Headers.TryGetValue("X-Test-Amr", out var amr))
+            claims.Add(new Claim("amr", amr.ToString()));
         if (Request.Headers.TryGetValue("X-Test-Extra-Site", out var extraSite))
             claims.Add(new Claim("site_id", extraSite.ToString()));
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));

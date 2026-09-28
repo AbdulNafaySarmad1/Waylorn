@@ -14,7 +14,7 @@ The Rust crate remains at `crates/ot-core` because its code belongs to the OT pl
 
 ## Configure and run
 
-Set `Authentication__Authority` to the HTTPS Keycloak realm URL, `Authentication__Audience` to the API client audience, and `ConnectionStrings__Waylorn` to a PostgreSQL connection string. Do not put secrets in the repository. The API refuses to start when any of these are missing. Keycloak must map `sub`, `org_id`, repeated `site_id` (or `*` for tenant-wide scope), `waylorn_role` (`Viewer`, `Operator`, `Administrator`, `Approver`), and `principal_type=human` for approvers. These claim mappings are a contract to test against a real realm; they are not automatic Keycloak defaults. `amr` remains available for future site-approved RED workflows; this API does not accept RED requests.
+Set `Authentication__Authority` to the HTTPS Keycloak realm URL, `Authentication__Audience` to the API client audience, and `ConnectionStrings__Waylorn` to a PostgreSQL connection string. Do not put secrets in the repository. The API refuses to start when any of these are missing. Keycloak must map `sub`, `org_id`, repeated `site_id` (or `*` for tenant-wide scope), `waylorn_role` (`Viewer`, `Operator`, `Administrator`, `Approver`), and `principal_type=human` for approvers. AMBER approvers also need a verified `amr` value of `mfa`, `otp`, or `webauthn`; tokens without it are denied. These claim mappings are a contract to test against a real realm; they are not automatic Keycloak defaults. This API does not accept RED requests.
 
 For the loopback-only development container, `ASPNETCORE_ENVIRONMENT=Development` and `Authentication__AllowInsecureLoopback=true` permit an `http://127.0.0.1` issuer. Production configuration still requires HTTPS metadata.
 
@@ -42,7 +42,7 @@ Set `Cache:Endpoint` to enable Valkey for 30-second asset-detail reads. Authoriz
 | `GET /api/v1/assets/{id}/relationships` | Returns relations only when both endpoint assets are visible. |
 | `POST /api/v1/commands` | Operator/Administrator records an AMBER request; requires `Idempotency-Key`, change ticket, and window. RED requests, including industrial/network/security configuration changes, are denied and audited. No dispatch. |
 | `GET /api/v1/commands/{id}` | Scoped command state. |
-| `POST /api/v1/commands/{id}/approve` | Separate Approver, current window, ticket; RED records cannot be approved. Writes audit. No dispatch. |
+| `POST /api/v1/commands/{id}/approve` | Separate human Approver with MFA evidence, current window, ticket; RED records cannot be approved. Writes audit. No dispatch. |
 | `GET /api/v0/orgs/{orgId}/topology/neighborhood` | Site-scoped, bounded relationship traversal for the web graph. |
 | `GET /api/v0/orgs/{orgId}/topology/impact` | Site-scoped upstream/downstream traversal over explicit dependency relations. |
 | `GET /api/v0/orgs/{orgId}/assets/{assetId}/actions` | Returns an empty list after authorization because there is no executable action transport or site capability evidence. |

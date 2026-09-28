@@ -114,8 +114,11 @@ $request = Send-Json 'POST' '/api/v1/commands' $admin @{
 if ($request.StatusCode -ne 201) { throw "Command request returned $($request.StatusCode): $($request.Content)" }
 $commandId = ($request.Content | ConvertFrom-Json).id
 $approval = Send-Json 'POST' "/api/v1/commands/$commandId/approve" $approver $null
-if ($approval.StatusCode -ne 200) { throw "AMBER approval returned $($approval.StatusCode): $($approval.Content)" }
-if (($approval.Content | ConvertFrom-Json).state -ne 'Approved') { throw 'Approval state did not persist.' }
+if ($approval.StatusCode -ne 403) { throw "Password-only AMBER approval returned $($approval.StatusCode): $($approval.Content)" }
+$pending = Send-Json 'GET' "/api/v1/commands/$commandId" $approver $null
+if ($pending.StatusCode -ne 200 -or ($pending.Content | ConvertFrom-Json).state -ne 'Pending') {
+    throw 'Password-only approval changed the pending command.'
+}
 
 $red = Send-Json 'POST' '/api/v1/commands' $admin @{
     assetId = $assetId; operation = 'Write'; changeTicket = 'SMOKE-RED'

@@ -28,9 +28,12 @@ public static class AccessPolicy
         OrganizationId(principal) != Guid.Empty && HasSite(principal, siteId) &&
         (HasRole(principal, "Operator") || HasRole(principal, "Administrator"));
 
-    public static bool CanApprove(ClaimsPrincipal principal, Guid siteId) =>
+    public static bool CanReviewCommand(ClaimsPrincipal principal, Guid siteId) =>
         OrganizationId(principal) != Guid.Empty && HasSite(principal, siteId) &&
         HasRole(principal, "Approver") && principal.FindFirstValue("principal_type") == "human";
+
+    public static bool CanApprove(ClaimsPrincipal principal, Guid siteId) =>
+        CanReviewCommand(principal, siteId) && HasStrongAuthentication(principal);
 
     public static bool HasStrongAuthentication(ClaimsPrincipal principal) =>
         principal.FindAll("amr").Any(x => x.Value is "mfa" or "otp" or "webauthn");

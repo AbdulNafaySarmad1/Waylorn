@@ -57,7 +57,7 @@ public static class CommandEndpoints
     {
         var command = await db.Commands.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
         if (command is null) return Results.NotFound();
-        return AccessPolicy.CanRead(http.User, command.SiteId) || AccessPolicy.CanApprove(http.User, command.SiteId)
+        return AccessPolicy.CanRead(http.User, command.SiteId) || AccessPolicy.CanReviewCommand(http.User, command.SiteId)
             ? Results.Ok(command) : Results.Forbid();
     }
 
