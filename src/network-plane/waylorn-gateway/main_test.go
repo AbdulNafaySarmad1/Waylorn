@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -194,5 +197,71 @@ func TestHeartbeatContinuesWhenDeviceReadFails(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("gateway did not report its own connectivity after a failed device read")
+	}
+}
+
+func TestReplayIsBoundedAndHeartbeatSentOnce(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses a POSIX shell script")
+	}
+	dir := t.TempDir()
+	for i := 0; i < maxReplayPerDrain*2+10; i++ {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%04d.json", i)), []byte(`{}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reader := filepath.Join(t.TempDir(), "reader")
+	if err := os.WriteFile(reader, []byte("#!/bin/sh\nprintf '{\"schemaVersion\":1,\"values\":[42]}'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	observations, heartbeats := 0, 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/observations":
+			observations++
+			w.WriteHeader(http.StatusAccepted)
+		case "/api/v1/site-agents/heartbeat":
+			heartbeats++
+			w.WriteHeader(http.StatusAccepted)
+		default:
+			t.Errorf("unexpected route: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	cfg := config{spool: dir, apiURL: server.URL, siteID: "site", assetID: "asset",
+		reader: reader, endpoint: "127.0.0.1:1502", kind: "holding", count: 1, intervalMs: 1000}
+	auth := &tokenProvider{token: "test-token", expires: time.Now().Add(time.Minute)}
+	if err := runCycle(context.Background(), cfg, server.Client(), auth); err != nil {
+		t.Fatal(err)
+	}
+	if observations != maxReplayPerDrain*2 || heartbeats != 1 {
+		t.Fatalf("unbounded replay or duplicate heartbeat: observations=%d heartbeats=%d", observations, heartbeats)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 11 {
+		t.Fatalf("queued observations were lost: %d files, %v", len(entries), err)
+	}
+}
+
+func TestReplaySkipsSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation may require a Windows privilege")
+	}
+	dir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "private.json")
+	if err := os.WriteFile(outside, []byte(`{"private":true}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "0001.json")); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("symlinked content was sent")
+	}))
+	defer server.Close()
+	cfg := config{spool: dir, apiURL: server.URL}
+	auth := &tokenProvider{token: "test-token", expires: time.Now().Add(time.Minute)}
+	if err := drain(context.Background(), cfg, server.Client(), auth); err != nil {
+		t.Fatal(err)
 	}
 }

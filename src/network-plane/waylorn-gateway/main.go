@@ -53,6 +53,8 @@ type observation struct {
 	Values             []sample  `json:"values"`
 }
 
+const maxReplayPerDrain = 50
+
 func main() {
 	cfg, err := loadConfig()
 	if err != nil {
@@ -208,7 +210,7 @@ func runCycle(ctx context.Context, c config, client *http.Client, auth *tokenPro
 func pollCycle(ctx context.Context, c config, client *http.Client, auth *tokenProvider) error {
 	// Drain old local data first. If the control plane is unavailable, continue one
 	// bounded read and retain it on disk; no cloud service is needed for site I/O.
-	firstErr := drain(ctx, c, client, auth)
+	firstErr := timedDrain(ctx, c, client, auth)
 	entries, err := os.ReadDir(c.spool)
 	if err != nil {
 		return err
@@ -226,10 +228,13 @@ func pollCycle(ctx context.Context, c config, client *http.Client, auth *tokenPr
 	if firstErr != nil {
 		return firstErr
 	}
-	if err := drain(ctx, c, client, auth); err != nil {
-		return err
-	}
-	return sendHeartbeat(ctx, c, client, auth)
+	return timedDrain(ctx, c, client, auth)
+}
+
+func timedDrain(ctx context.Context, c config, client *http.Client, auth *tokenProvider) error {
+	replayCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return drain(replayCtx, c, client, auth)
 }
 
 func sendHeartbeat(ctx context.Context, c config, client *http.Client, auth *tokenProvider) error {
@@ -239,7 +244,7 @@ func sendHeartbeat(ctx context.Context, c config, client *http.Client, auth *tok
 	}
 	depth := 0
 	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+		if entry.Type().IsRegular() && strings.HasSuffix(entry.Name(), ".json") {
 			depth++
 		}
 	}
@@ -363,12 +368,12 @@ func drain(ctx context.Context, c config, client *http.Client, auth *tokenProvid
 	}
 	names := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+		if entry.Type().IsRegular() && strings.HasSuffix(entry.Name(), ".json") {
 			names = append(names, entry.Name())
 		}
 	}
 	slices.Sort(names)
-	for _, name := range names {
+	for _, name := range names[:min(len(names), maxReplayPerDrain)] {
 		path := filepath.Join(c.spool, name)
 		data, err := os.ReadFile(path)
 		if err != nil {
