@@ -166,6 +166,23 @@ public class ApiTests
             observation.expectedIntervalMs, observation.values };
         Assert.Equal(HttpStatusCode.BadRequest,
             (await client.PostAsJsonAsync("/api/v1/observations", expired)).StatusCode);
+
+        // Two gateways requesting one read per second exceed a 90-per-minute site budget, so both are slowed.
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync($"/api/v1/sites/{site}/polling-budget",
+            new { maxPollsPerMinute = 90 })).StatusCode);
+        SetIdentity(client, org, site, "Administrator", "admin");
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync($"/api/v1/sites/{site}/polling-budget",
+            new { maxPollsPerMinute = 0 })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PutAsJsonAsync($"/api/v1/sites/{site}/polling-budget",
+            new { maxPollsPerMinute = 90 })).StatusCode);
+        SetIdentity(client, org, site, "SiteAgent", "agent-2");
+        var budgeted = await client.PostAsJsonAsync("/api/v1/site-agents/heartbeat",
+            new { schemaVersion = 1, siteId = site, intervalMs = 1000, requestedIntervalMs = 1000, spoolDepth = 0 });
+        Assert.Equal(HttpStatusCode.Accepted, budgeted.StatusCode);
+        Assert.Equal(1334, (await budgeted.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("pollIntervalMs").GetInt32());
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/v1/site-agents/heartbeat",
+            new { schemaVersion = 1, siteId = site, intervalMs = 1000, requestedIntervalMs = 100, spoolDepth = 0 })).StatusCode);
+        SetIdentity(client, org, site, "SiteAgent", "agent-1");
         Assert.Equal(HttpStatusCode.OK,
             (await client.PostAsJsonAsync("/api/v1/observations", observation)).StatusCode);
         var changed = new { observation.schemaVersion, observation.requestId, observation.siteId, observation.assetId,
@@ -304,9 +321,9 @@ public class ApiTests
         Assert.Equal(0, await db.Commands.CountAsync());
         var options = new DbContextOptionsBuilder<WaylornDbContext>().UseSqlite(sqlite).Options;
         await using var ownerDb = new WaylornDbContext(options, new TenantScope(org));
-        Assert.Equal(22, await ownerDb.Audit.CountAsync());
+        Assert.Equal(23, await ownerDb.Audit.CountAsync());
         Assert.Single(await ownerDb.Commands.ToListAsync());
-        Assert.Equal(22, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Audit));
+        Assert.Equal(23, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Audit));
         Assert.Equal(2, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Control));
         Assert.Equal(4, await ownerDb.Outbox.CountAsync(x => x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Operations));
         var eventPayload = JsonDocument.Parse((await ownerDb.Outbox.FirstAsync()).Payload);
@@ -336,7 +353,7 @@ public class ApiTests
         client.DefaultRequestHeaders.Add("X-Test-Site", "*");
         var chain = await client.GetFromJsonAsync<JsonElement>("/api/v1/audit/chain/verify");
         Assert.Equal("intact", chain.GetProperty("state").GetString());
-        Assert.Equal(22, chain.GetProperty("checked").GetInt64());
+        Assert.Equal(23, chain.GetProperty("checked").GetInt64());
     }
 
     private static async Task<Guid> CreateAsset(HttpClient client, Guid site, string name, string kind = "Industrial")

@@ -7,7 +7,9 @@ using Waylorn.ControlPlane.Infrastructure;
 namespace Waylorn.ControlPlane.Api;
 
 public sealed record OrganizationInput(string Slug, string Name);
-public sealed record SiteInput(Guid Id, string Code, string Name, string RegionName, string Timezone, string Environment);
+public sealed record SiteInput(Guid Id, string Code, string Name, string RegionName, string Timezone, string Environment,
+    int? MaxPollsPerMinute = null);
+public sealed record PollingBudgetInput(int MaxPollsPerMinute);
 public sealed record ZoneInput(Guid Id, string Code, string Name);
 
 public static class TenancyEndpoints
@@ -18,6 +20,7 @@ public static class TenancyEndpoints
         api.MapPost("/organization", CreateOrganization);
         api.MapGet("/sites", ListSites);
         api.MapPost("/sites", CreateSite);
+        api.MapPut("/sites/{siteId:guid}/polling-budget", SetPollingBudget);
         api.MapGet("/sites/{siteId:guid}/zones", ListZones);
         api.MapPost("/sites/{siteId:guid}/zones", CreateZone);
     }
@@ -63,7 +66,8 @@ public static class TenancyEndpoints
         if (!AccessPolicy.CanEdit(http.User, input.Id)) return Results.Forbid();
         if (input.Id == Guid.Empty || !ValidCode(input.Code) || !ValidName(input.Name) ||
             !ValidName(input.RegionName) || string.IsNullOrWhiteSpace(input.Timezone) ||
-            input.Timezone.Length > 80 || input.Environment is not ("lab" or "staging" or "production"))
+            input.Timezone.Length > 80 || input.Environment is not ("lab" or "staging" or "production") ||
+            input.MaxPollsPerMinute is < 1 or > 60_000)
             return Results.BadRequest();
         if (!await db.Organizations.AnyAsync(ct)) return Results.Problem(statusCode: 409, detail: "Organization must be registered first.");
         if (await db.Sites.AnyAsync(x => x.Id == input.Id, ct)) return Results.Conflict();
@@ -73,12 +77,26 @@ public static class TenancyEndpoints
             Name = input.Name.Trim(), RegionName = input.RegionName.Trim(),
             Timezone = input.Timezone, Environment = input.Environment, CreatedUtc = DateTimeOffset.UtcNow
         };
+        if (input.MaxPollsPerMinute is { } budget) site.MaxPollsPerMinute = budget;
         db.Sites.Add(site);
         AuditWriter.Add(db, AccessPolicy.Subject(http.User), "site.create", "site", site.Id, site.Id);
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         { return Results.Conflict(); }
         return Results.Created($"/api/v1/sites/{site.Id}", site);
+    }
+
+    private static async Task<IResult> SetPollingBudget(Guid siteId, PollingBudgetInput input, HttpContext http,
+        WaylornDbContext db, CancellationToken ct)
+    {
+        if (!AccessPolicy.CanEdit(http.User, siteId)) return Results.Forbid();
+        if (input.MaxPollsPerMinute is < 1 or > 60_000) return Results.BadRequest();
+        var site = await db.Sites.SingleOrDefaultAsync(x => x.Id == siteId, ct);
+        if (site is null) return Results.NotFound();
+        site.MaxPollsPerMinute = input.MaxPollsPerMinute;
+        AuditWriter.Add(db, AccessPolicy.Subject(http.User), "site.polling-budget", "site", site.Id, site.Id);
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new { site.Id, site.MaxPollsPerMinute });
     }
 
     private static async Task<IResult> ListZones(Guid siteId, HttpContext http, WaylornDbContext db, CancellationToken ct)

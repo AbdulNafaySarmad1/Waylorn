@@ -542,3 +542,35 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928080744_AddSitePollingBudget') THEN
+    ALTER TABLE "Sites" ADD "MaxPollsPerMinute" integer NOT NULL DEFAULT 600;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928080744_AddSitePollingBudget') THEN
+    ALTER TABLE "SiteAgentHeartbeats" ADD "RequestedIntervalMs" integer NOT NULL DEFAULT 0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928080744_AddSitePollingBudget') THEN
+    UPDATE "SiteAgentHeartbeats" SET "RequestedIntervalMs" = "IntervalMs";
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928080744_AddSitePollingBudget') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260928080744_AddSitePollingBudget', '10.0.9');
+    END IF;
+END $EF$;
+COMMIT;
+

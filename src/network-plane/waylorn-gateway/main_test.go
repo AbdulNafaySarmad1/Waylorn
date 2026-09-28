@@ -111,7 +111,7 @@ func TestCancelledCycleRetainsUnacknowledgedObservation(t *testing.T) {
 	auth := &tokenProvider{token: "test-token", expires: time.Now().Add(time.Minute)}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := runCycle(ctx, cfg, server.Client(), auth); !errors.Is(err, context.Canceled) {
+	if _, err := runCycle(ctx, cfg, server.Client(), auth); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cycle did not stop on cancellation: %v", err)
 	}
 	entries, err := os.ReadDir(dir)
@@ -161,21 +161,40 @@ func TestHeartbeatReportsLocalSpoolDepth(t *testing.T) {
 			SchemaVersion int    `json:"schemaVersion"`
 			SiteID        string `json:"siteId"`
 			IntervalMs    int    `json:"intervalMs"`
+			Requested     int    `json:"requestedIntervalMs"`
 			SpoolDepth    int    `json:"spoolDepth"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
 		}
-		if body.SchemaVersion != 1 || body.SiteID != "test-site" || body.IntervalMs != 1000 || body.SpoolDepth != 1 {
+		if body.SchemaVersion != 1 || body.SiteID != "test-site" || body.IntervalMs != 2000 ||
+			body.Requested != 1000 || body.SpoolDepth != 1 {
 			t.Errorf("unexpected heartbeat: %+v", body)
 		}
 		w.WriteHeader(http.StatusAccepted)
+		w.Write([]byte(`{"pollIntervalMs":3000}`))
 	}))
 	defer server.Close()
-	cfg := config{spool: dir, apiURL: server.URL, siteID: "test-site", intervalMs: 1000}
+	cfg := config{spool: dir, apiURL: server.URL, siteID: "test-site", intervalMs: 2000, requestedMs: 1000}
 	auth := &tokenProvider{token: "test-token", expires: time.Now().Add(time.Minute)}
-	if err := sendHeartbeat(context.Background(), cfg, server.Client(), auth); err != nil {
-		t.Fatal(err)
+	assigned, err := sendHeartbeat(context.Background(), cfg, server.Client(), auth)
+	if err != nil || assigned != 3000 {
+		t.Fatalf("assignment %d, error %v", assigned, err)
+	}
+}
+
+func TestSiteBudgetCanOnlySlowPolling(t *testing.T) {
+	cfg := config{intervalMs: 2000, requestedMs: 1000}
+	for assigned, want := range map[int]int{
+		0:       2000, // no assignment received: keep the current pace
+		500:     2000, // faster than the locally approved interval: refused
+		1000:    1000, // budget freed: back to the approved interval
+		4000:    4000,
+		3600001: 2000, // out of bounds: refused
+	} {
+		if got := nextInterval(cfg, assigned); got != want {
+			t.Errorf("assigned %d: got %d, want %d", assigned, got, want)
+		}
 	}
 }
 
@@ -192,7 +211,7 @@ func TestHeartbeatContinuesWhenDeviceReadFails(t *testing.T) {
 	cfg := config{spool: t.TempDir(), apiURL: server.URL, siteID: "test-site",
 		intervalMs: 1000, reader: "/missing-ot-observe"}
 	auth := &tokenProvider{token: "test-token", expires: time.Now().Add(time.Minute)}
-	if err := runCycle(context.Background(), cfg, server.Client(), auth); err == nil {
+	if _, err := runCycle(context.Background(), cfg, server.Client(), auth); err == nil {
 		t.Fatal("failed device read was hidden")
 	}
 	if !called {
@@ -231,7 +250,7 @@ func TestReplayIsBoundedAndHeartbeatSentOnce(t *testing.T) {
 	cfg := config{spool: dir, apiURL: server.URL, siteID: "site", assetID: "asset",
 		reader: reader, endpoint: "127.0.0.1:1502", kind: "holding", count: 1, intervalMs: 1000}
 	auth := &tokenProvider{token: "test-token", expires: time.Now().Add(time.Minute)}
-	if err := runCycle(context.Background(), cfg, server.Client(), auth); err != nil {
+	if _, err := runCycle(context.Background(), cfg, server.Client(), auth); err != nil {
 		t.Fatal(err)
 	}
 	if observations != maxReplayPerDrain*2 || heartbeats != 1 {
@@ -305,7 +324,7 @@ func TestPermanentRejectionIsRetainedWithoutBlockingLaterReplay(t *testing.T) {
 	if err := drain(context.Background(), cfg, server.Client(), auth); err != nil {
 		t.Fatal(err)
 	}
-	if err := sendHeartbeat(context.Background(), cfg, server.Client(), auth); err != nil {
+	if _, err := sendHeartbeat(context.Background(), cfg, server.Client(), auth); err != nil {
 		t.Fatal(err)
 	}
 	active, rejected, err := spoolCounts(dir)

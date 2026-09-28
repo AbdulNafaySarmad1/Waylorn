@@ -29,7 +29,8 @@ import (
 
 type config struct {
 	reader, endpoint, kind, siteID, assetID, apiURL, issuer, clientID, secret, spool string
-	unit, start, count, intervalMs                                                   int
+	// intervalMs is the current budgeted interval; requestedMs is the locally approved floor.
+	unit, start, count, intervalMs, requestedMs int
 }
 
 type registerResult struct {
@@ -71,13 +72,8 @@ func main() {
 	auth := &tokenProvider{client: client, cfg: cfg}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	cycle := func() {
-		if err := runCycle(ctx, cfg, client, auth); err != nil && ctx.Err() == nil {
-			log.Printf("observation cycle: %v", err)
-		}
-	}
 	if len(os.Args) == 2 && os.Args[1] == "--once" {
-		if err := runCycle(ctx, cfg, client, auth); err != nil && ctx.Err() == nil {
+		if _, err := runCycle(ctx, cfg, client, auth); err != nil && ctx.Err() == nil {
 			log.Fatal(err)
 		}
 		return
@@ -85,17 +81,33 @@ func main() {
 	if len(os.Args) != 1 {
 		log.Fatal("usage: waylorn-gateway [--once]")
 	}
-	cycle()
 	ticker := time.NewTicker(time.Duration(cfg.intervalMs) * time.Millisecond)
 	defer ticker.Stop()
 	for {
+		assigned, err := runCycle(ctx, cfg, client, auth)
+		if err != nil && ctx.Err() == nil {
+			log.Printf("observation cycle: %v", err)
+		}
+		if next := nextInterval(cfg, assigned); next != cfg.intervalMs {
+			log.Printf("site polling budget: interval %d ms -> %d ms", cfg.intervalMs, next)
+			cfg.intervalMs = next
+			ticker.Reset(time.Duration(next) * time.Millisecond)
+		}
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			cycle()
 		}
 	}
+}
+
+// nextInterval adopts the control plane's site budget assignment, but never polls faster than the
+// locally approved interval. No assignment (unreachable API, older server) keeps the current pace.
+func nextInterval(c config, assigned int) int {
+	if assigned < c.requestedMs || assigned > 3600000 {
+		return c.intervalMs
+	}
+	return assigned
 }
 
 func required(name string) string {
@@ -150,6 +162,7 @@ func loadConfig() (config, error) {
 		c.intervalMs < 250 || c.intervalMs > 3600000 {
 		return c, errors.New("Modbus read range or polling interval is outside bounds")
 	}
+	c.requestedMs = c.intervalMs
 	for _, raw := range []string{c.apiURL, c.issuer} {
 		u, err := url.Parse(raw)
 		if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
@@ -203,9 +216,11 @@ func newClient() (*http.Client, error) {
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, nil
 }
 
-func runCycle(ctx context.Context, c config, client *http.Client, auth *tokenProvider) error {
+// runCycle returns the site budget interval from the heartbeat, or 0 when none was received.
+func runCycle(ctx context.Context, c config, client *http.Client, auth *tokenProvider) (int, error) {
 	pollErr := pollCycle(ctx, c, client, auth)
-	return errors.Join(pollErr, sendHeartbeat(ctx, c, client, auth))
+	assigned, heartbeatErr := sendHeartbeat(ctx, c, client, auth)
+	return assigned, errors.Join(pollErr, heartbeatErr)
 }
 
 func pollCycle(ctx context.Context, c config, client *http.Client, auth *tokenProvider) error {
@@ -238,39 +253,44 @@ func timedDrain(ctx context.Context, c config, client *http.Client, auth *tokenP
 	return drain(replayCtx, c, client, auth)
 }
 
-func sendHeartbeat(ctx context.Context, c config, client *http.Client, auth *tokenProvider) error {
+func sendHeartbeat(ctx context.Context, c config, client *http.Client, auth *tokenProvider) (int, error) {
 	active, rejected, err := spoolCounts(c.spool)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	token, err := auth.get(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	data, err := json.Marshal(map[string]any{
-		"schemaVersion": 1, "siteId": c.siteID,
-		"intervalMs": c.intervalMs, "spoolDepth": active + rejected,
+		"schemaVersion": 1, "siteId": c.siteID, "intervalMs": c.intervalMs,
+		"requestedIntervalMs": c.requestedMs, "spoolDepth": active + rejected,
 	})
 	if err != nil {
-		return err
+		return 0, err
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		c.apiURL+"/api/v1/site-agents/heartbeat", bytes.NewReader(data))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("Content-Type", "application/json")
 	response, err := client.Do(request)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	io.Copy(io.Discard, io.LimitReader(response.Body, 256))
-	response.Body.Close()
+	defer response.Body.Close()
 	if response.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("site heartbeat API returned %d", response.StatusCode)
+		io.Copy(io.Discard, io.LimitReader(response.Body, 256))
+		return 0, fmt.Errorf("site heartbeat API returned %d", response.StatusCode)
 	}
-	return nil
+	var reply struct {
+		PollIntervalMs int `json:"pollIntervalMs"`
+	}
+	// A malformed or absent assignment is not a contact failure; the current pace is kept.
+	_ = json.NewDecoder(io.LimitReader(response.Body, 4096)).Decode(&reply)
+	return reply.PollIntervalMs, nil
 }
 
 func observe(ctx context.Context, c config) (observation, error) {

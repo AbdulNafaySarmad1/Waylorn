@@ -117,6 +117,7 @@ public sealed class WaylornDbContext : DbContext
             e.Property(x => x.RegionName).HasMaxLength(120);
             e.Property(x => x.Timezone).HasMaxLength(80);
             e.Property(x => x.Environment).HasMaxLength(20);
+            e.Property(x => x.MaxPollsPerMinute).HasDefaultValue(600);
             e.HasIndex(x => new { x.OrganizationId, x.Code }).IsUnique();
             e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
         });

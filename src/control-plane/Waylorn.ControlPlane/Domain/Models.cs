@@ -33,6 +33,8 @@ public sealed class Site : ITenantOwned
     public string Timezone { get; set; } = "UTC";
     public string Environment { get; set; } = "lab";
     public DateTimeOffset CreatedUtc { get; set; }
+    // Combined read requests per minute that all of the site's gateways may issue to devices.
+    public int MaxPollsPerMinute { get; set; } = 600;
 }
 
 public sealed class Zone : ITenantOwned
@@ -142,6 +144,8 @@ public sealed class SiteAgentHeartbeat : ITenantOwned
     public string AgentId { get; set; } = "";
     public DateTime LastSeenUtc { get; set; }
     public int IntervalMs { get; set; }
+    // The gateway's locally approved interval; IntervalMs is the budgeted interval it runs at.
+    public int RequestedIntervalMs { get; set; }
     public int SpoolDepth { get; set; }
 }
 

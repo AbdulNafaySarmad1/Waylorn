@@ -33,6 +33,7 @@ Set `Cache:Endpoint` to enable Valkey for 30-second asset-detail reads. Authoriz
 | `GET/POST /api/v1/organization` | Tenant-scoped organization lookup and administrator registration. |
 | `GET/POST /api/v1/sites` | Claim-scoped site listing and administrator registration. |
 | `GET/POST /api/v1/sites/{siteId}/zones` | Site-scoped zone listing and administrator registration. |
+| `PUT /api/v1/sites/{siteId}/polling-budget` | Audited administrator change to the site's combined gateway read budget (`maxPollsPerMinute`, ADR 0034). |
 | `GET /api/v1/assets?siteId=` | Up to 500 tenant/site-scoped assets. |
 | `GET /api/v1/assets/{id}` | Tenant/site-scoped asset. |
 | `POST /api/v1/assets` | Administrator creates asset and audit row after site/zone registry validation. |

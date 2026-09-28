@@ -284,6 +284,23 @@ public class ControlPlaneTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
     }
 
+    [Theory]
+    [InlineData(1000, new int[0], 600, 1000)]          // one read per second fits the default budget
+    [InlineData(1000, new[] { 1000 }, 90, 1334)]       // 120/min demand scaled to 90/min
+    [InlineData(250, new[] { 250, 250, 250 }, 60, 4000)] // 960/min on a 60/min site: 16x slower
+    [InlineData(1000, new[] { 500 }, 1, 180_000)]       // stretching is shared, not charged to the newcomer
+    [InlineData(250, new int[0], 1, 250 * 240)]
+    public void Polling_budget_scales_every_gateway_to_the_site_limit(int requested, int[] others, int budget, int expected)
+    {
+        Assert.Equal(expected, PollingBudget.Assign(requested, others, budget));
+        // Every gateway applying its own assignment keeps the site within budget, or unchanged if it already fit.
+        var all = others.Append(requested).ToArray();
+        var demand = all.Sum(ms => 60_000d / ms);
+        var total = all.Select((ms, i) => 60_000d / PollingBudget.Assign(ms, all.Where((_, j) => j != i), budget)).Sum();
+        if (demand <= budget) Assert.Equal(demand, total, 9);
+        else Assert.True(total <= budget + 1e-9, $"{total} polls/min exceeds {budget}");
+    }
+
     private static AuditIntegrity SigningIntegrity() => AuditIntegrity.FromConfiguration(
         new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
