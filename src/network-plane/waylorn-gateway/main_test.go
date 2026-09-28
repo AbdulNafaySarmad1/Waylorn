@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -87,6 +88,32 @@ func TestObservationRateLimitPausesReplayWithoutDroppingBatch(t *testing.T) {
 	entries, err := os.ReadDir(dir)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("rate-limited observation was lost: %v, %v", entries, err)
+	}
+}
+
+func TestCancelledCycleRetainsUnacknowledgedObservation(t *testing.T) {
+	dir := t.TempDir()
+	item := observation{SchemaVersion: 1, RequestID: "7e1de57c-80e7-4a9f-887c-040b0672a7fb",
+		SiteID: "site", AssetID: "asset", Source: "site-agent/modbus-tcp",
+		ObservedUtc: time.Now().UTC(), ExpectedIntervalMs: 1000,
+		Values: []sample{{SignalKey: "modbus.holding.10", Value: 42}}}
+	if err := enqueue(dir, item); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("cancelled request reached the API")
+	}))
+	defer server.Close()
+	cfg := config{spool: dir, apiURL: server.URL, reader: "/missing-ot-observe"}
+	auth := &tokenProvider{token: "test-token", expires: time.Now().Add(time.Minute)}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := runCycle(ctx, cfg, server.Client(), auth); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cycle did not stop on cancellation: %v", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("unacknowledged observation was lost: %v, %v", entries, err)
 	}
 }
 

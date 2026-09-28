@@ -18,10 +18,12 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -64,13 +66,15 @@ func main() {
 		log.Fatal(err)
 	}
 	auth := &tokenProvider{client: client, cfg: cfg}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	cycle := func() {
-		if err := runCycle(context.Background(), cfg, client, auth); err != nil {
+		if err := runCycle(ctx, cfg, client, auth); err != nil && ctx.Err() == nil {
 			log.Printf("observation cycle: %v", err)
 		}
 	}
 	if len(os.Args) == 2 && os.Args[1] == "--once" {
-		if err := runCycle(context.Background(), cfg, client, auth); err != nil {
+		if err := runCycle(ctx, cfg, client, auth); err != nil && ctx.Err() == nil {
 			log.Fatal(err)
 		}
 		return
@@ -81,8 +85,13 @@ func main() {
 	cycle()
 	ticker := time.NewTicker(time.Duration(cfg.intervalMs) * time.Millisecond)
 	defer ticker.Stop()
-	for range ticker.C {
-		cycle()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cycle()
+		}
 	}
 }
 
