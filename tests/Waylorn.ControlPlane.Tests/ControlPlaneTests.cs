@@ -35,6 +35,42 @@ public class ControlPlaneTests
     }
 
     [Fact]
+    public void Audit_rotation_keeps_historical_records_verifiable()
+    {
+        var oldKey = Convert.ToBase64String(Enumerable.Repeat((byte)42, 32).ToArray());
+        var newKey = Convert.ToBase64String(Enumerable.Repeat((byte)43, 32).ToArray());
+        var oldConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Audit:KeyId"] = "v1", ["Audit:SigningKey"] = oldKey
+        }).Build();
+        var oldIntegrity = AuditIntegrity.FromConfiguration(oldConfig, required: true);
+        var record = new AuditRecord
+        {
+            Id = Guid.NewGuid(), OrganizationId = Guid.NewGuid(), Principal = "admin",
+            Action = "asset.create", TargetType = "asset", TargetId = Guid.NewGuid(),
+            Outcome = "created", AtUtc = DateTimeOffset.UtcNow
+        };
+        oldIntegrity.Sign(record);
+        var rotatedConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Audit:KeyId"] = "v2", ["Audit:SigningKey"] = newKey,
+            ["Audit:VerificationKeys:v1"] = oldKey
+        }).Build();
+        var rotated = AuditIntegrity.FromConfiguration(rotatedConfig, required: true);
+        Assert.Equal("verified", rotated.Verify(record));
+        var newer = new AuditRecord
+        {
+            Id = Guid.NewGuid(), OrganizationId = record.OrganizationId, Principal = "admin",
+            Action = "asset.update", TargetType = "asset", TargetId = record.TargetId,
+            Outcome = "updated", AtUtc = DateTimeOffset.UtcNow
+        };
+        rotated.Sign(newer);
+        Assert.Equal("v2", newer.IntegrityKeyId);
+        Assert.Equal("verified", rotated.Verify(newer));
+        Assert.Equal("unverified", oldIntegrity.Verify(newer));
+    }
+
+    [Fact]
     public void Site_link_state_uses_server_seen_heartbeat_and_spool_depth()
     {
         var now = DateTime.UtcNow;
