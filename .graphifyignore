@@ -1,0 +1,5 @@
+# Keep local secrets and unrelated user assets out of the repository graph.
+assets/
+deploy/dev/.env
+apps/web/.env.development.local
+graphify-out/
