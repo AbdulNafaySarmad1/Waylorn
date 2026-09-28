@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Waylorn.ControlPlane.Application;
 using Waylorn.ControlPlane.Domain;
 using Waylorn.ControlPlane.Infrastructure;
 
@@ -11,7 +12,15 @@ public static class AuditEndpoints
         api.MapGet("/audit", ListAudit);
         api.MapGet("/audit/{id:guid}", GetAudit);
         api.MapGet("/audit/{id:guid}/verify", VerifyAudit);
+        api.MapGet("/audit/chain/verify", VerifyChain);
     }
+
+    // The chain spans every site in the organization, so only organization-wide administrators may walk it.
+    private static async Task<IResult> VerifyChain(HttpContext http, WaylornDbContext db, CancellationToken ct) =>
+        AccessPolicy.HasRole(http.User, "Administrator") && db.OrganizationId != Guid.Empty &&
+        http.User.FindAll("site_id").Any(x => x.Value == "*")
+            ? Results.Ok(await AuditChain.VerifyAsync(db, ct))
+            : Results.Forbid();
 
     private static async Task<IResult> ListAudit(Guid? siteId, Guid? targetId, string? cursor, int? limit,
         HttpContext http, WaylornDbContext db, CancellationToken ct)

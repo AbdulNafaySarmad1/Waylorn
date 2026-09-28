@@ -328,6 +328,15 @@ public class ApiTests
         SetIdentity(client, org, site, "Administrator", "admin");
         var integrity = await client.GetFromJsonAsync<JsonElement>($"/api/v1/audit/{audited.Id}/verify");
         Assert.Equal("verified", integrity.GetProperty("state").GetString());
+        var auditEvent = JsonDocument.Parse((await ownerDb.Outbox.SingleAsync(x => x.Id == audited.Id)).Payload).RootElement;
+        Assert.Equal(audited.ChainSequence, auditEvent.GetProperty("chainSequence").GetInt64());
+        Assert.Equal(audited.IntegrityTag, auditEvent.GetProperty("integrityTag").GetString());
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/v1/audit/chain/verify")).StatusCode);
+        client.DefaultRequestHeaders.Remove("X-Test-Site");
+        client.DefaultRequestHeaders.Add("X-Test-Site", "*");
+        var chain = await client.GetFromJsonAsync<JsonElement>("/api/v1/audit/chain/verify");
+        Assert.Equal("intact", chain.GetProperty("state").GetString());
+        Assert.Equal(22, chain.GetProperty("checked").GetInt64());
     }
 
     private static async Task<Guid> CreateAsset(HttpClient client, Guid site, string name, string kind = "Industrial")

@@ -105,6 +105,17 @@ public sealed class AuditRecord : ITenantOwned
     public DateTimeOffset AtUtc { get; set; }
     public string? IntegrityKeyId { get; set; }
     public string? IntegrityTag { get; set; }
+    // Per-organization position and predecessor tag. Null only on records written before chaining.
+    public long? ChainSequence { get; set; }
+    public string? PreviousTag { get; set; }
+}
+
+// Last sealed audit position per organization, so tail truncation is visible to verification.
+public sealed class AuditChainHead : ITenantOwned
+{
+    public Guid OrganizationId { get; set; }
+    public long Sequence { get; set; }
+    public string? Tag { get; set; }
 }
 
 // Site-local observation history. Samples are keyed by the producer request and signal

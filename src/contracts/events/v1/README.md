@@ -4,7 +4,7 @@ The .NET transactional outbox emits UTF-8 JSON. Every event has `schemaVersion: 
 
 | Destination | Routing | Payload fields beyond the common fields |
 | --- | --- | --- |
-| Redpanda | `waylorn.audit.v1` | `principal`, `action`, `targetType`, `targetId`, `outcome`, `atUtc`, optional `integrityKeyId` and `integrityTag` |
+| Redpanda | `waylorn.audit.v1` | `principal`, `action`, `targetType`, `targetId`, `outcome`, `atUtc`, optional `integrityKeyId` and `integrityTag`, `chainSequence` (per-organization position) and `previousTag` (predecessor's tag) |
 | NATS JetStream | `waylorn.control.v1.requested` | `commandId`, `assetId`, `operation`, `risk`, `state`, `atUtc` |
 | NATS JetStream | `waylorn.control.v1.approval-recorded` | Same as requested, with the updated approval state |
 | NATS JetStream | `waylorn.operation.v1.incident-opened` / `incident-updated` | `targetId`, `state`, `actor`, `atUtc` |

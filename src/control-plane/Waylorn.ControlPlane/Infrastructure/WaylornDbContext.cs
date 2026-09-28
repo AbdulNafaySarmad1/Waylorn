@@ -39,7 +39,14 @@ public sealed class WaylornDbContext : DbContext
     public DbSet<MaintenanceWorkOrder> WorkOrders => Set<MaintenanceWorkOrder>();
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
 
-    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    public DbSet<AuditChainHead> AuditHeads => Set<AuditChainHead>();
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess) =>
+        ChangeTracker.Entries<AuditRecord>().Any(x => x.State == EntityState.Added)
+            ? throw new InvalidOperationException("Audit records must be saved asynchronously so they are chained.")
+            : base.SaveChanges(acceptAllChangesOnSuccess);
+
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         foreach (var entry in ChangeTracker.Entries<ITenantOwned>())
             if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted &&
@@ -48,7 +55,46 @@ public sealed class WaylornDbContext : DbContext
         foreach (var entry in ChangeTracker.Entries<Organization>())
             if (entry.State is EntityState.Added or EntityState.Modified && entry.Entity.Id != OrganizationId)
                 throw new InvalidOperationException("Organization identity does not match tenant scope.");
-        return base.SaveChangesAsync(cancellationToken);
+        foreach (var entry in ChangeTracker.Entries<AuditRecord>())
+            if (entry.State is EntityState.Modified or EntityState.Deleted)
+                throw new InvalidOperationException("Audit records are append-only.");
+
+        var pending = ChangeTracker.Entries<AuditRecord>().Where(x => x.State == EntityState.Added)
+            .Select(x => x.Entity).OrderBy(x => x.AtUtc).ThenBy(x => x.Id).ToList();
+        if (pending.Count == 0) return await base.SaveChangesAsync(cancellationToken);
+
+        // ponytail: audit appends serialize per organization; shard the chain per site if write volume demands it.
+        var transaction = Database.CurrentTransaction is null
+            ? await Database.BeginTransactionAsync(cancellationToken) : null;
+        AuditChainHead? head = null;
+        try
+        {
+            if (Database.IsNpgsql())
+                await Database.ExecuteSqlAsync(
+                    $"SELECT pg_advisory_xact_lock({BitConverter.ToInt64(OrganizationId.ToByteArray())})",
+                    cancellationToken);
+            head = await AuditHeads.AsNoTracking().SingleOrDefaultAsync(cancellationToken);
+            if (head is null) AuditHeads.Add(head = new AuditChainHead { OrganizationId = OrganizationId });
+            else AuditHeads.Update(head);
+            foreach (var record in pending)
+            {
+                record.ChainSequence = ++head.Sequence;
+                record.PreviousTag = head.Tag;
+                Integrity.Sign(record);
+                head.Tag = record.IntegrityTag;
+                var outbox = ChangeTracker.Entries<OutboxMessage>().FirstOrDefault(x => x.Entity.Id == record.Id);
+                if (outbox is not null) outbox.Entity.Payload = AuditWriter.Payload(record);
+            }
+            var written = await base.SaveChangesAsync(cancellationToken);
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+            return written;
+        }
+        finally
+        {
+            // The head is always re-read under the lock, never trusted from an earlier save.
+            if (head is not null) Entry(head).State = EntityState.Detached;
+            if (transaction is not null) await transaction.DisposeAsync();
+        }
     }
 
     protected override void OnModelCreating(ModelBuilder model)
@@ -134,7 +180,15 @@ public sealed class WaylornDbContext : DbContext
             e.Property(x => x.Outcome).HasMaxLength(100);
             e.Property(x => x.IntegrityKeyId).HasMaxLength(40);
             e.Property(x => x.IntegrityTag).HasMaxLength(64);
+            e.Property(x => x.PreviousTag).HasMaxLength(64);
             e.HasIndex(x => new { x.OrganizationId, x.AtUtc });
+            e.HasIndex(x => new { x.OrganizationId, x.ChainSequence }).IsUnique();
+            e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
+        });
+        model.Entity<AuditChainHead>(e =>
+        {
+            e.HasKey(x => x.OrganizationId);
+            e.Property(x => x.Tag).HasMaxLength(64);
             e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
         });
         model.Entity<TelemetrySample>(e =>

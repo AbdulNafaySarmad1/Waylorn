@@ -209,6 +209,88 @@ public class ControlPlaneTests
         await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => two.SaveChangesAsync());
     }
 
+    [Theory]
+    [InlineData("none", "intact", 0L)]
+    [InlineData("DELETE FROM Audit WHERE ChainSequence = 2", "missing", 2L)]
+    [InlineData("DELETE FROM Audit WHERE ChainSequence = 4", "truncated", 4L)]
+    [InlineData("UPDATE Audit SET ChainSequence = -1 WHERE ChainSequence = 2; " +
+        "UPDATE Audit SET ChainSequence = 2 WHERE ChainSequence = 3; " +
+        "UPDATE Audit SET ChainSequence = 3 WHERE ChainSequence = -1", "relinked", 2L)]
+    [InlineData("UPDATE Audit SET Outcome = 'denied' WHERE ChainSequence = 3", "tampered", 3L)]
+    [InlineData("UPDATE AuditHeads SET Sequence = 3", "beyond-head", 4L)]
+    public async Task Audit_chain_detects_deletion_reordering_and_truncation(string tamper, string outcome, long at)
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<WaylornDbContext>().UseSqlite(connection).Options;
+        var org = Guid.NewGuid();
+        var integrity = SigningIntegrity();
+        await using (var setup = new WaylornDbContext(options, new TenantScope(org), integrity))
+        {
+            await setup.Database.EnsureCreatedAsync();
+            AuditWriter.Add(setup, "a", "one", "asset", Guid.NewGuid(), null);
+            await setup.SaveChangesAsync();
+            AuditWriter.Add(setup, "a", "two", "asset", Guid.NewGuid(), null);
+            AuditWriter.Add(setup, "a", "three", "asset", Guid.NewGuid(), null);
+            await setup.SaveChangesAsync();
+        }
+        // A second context appends after the first and must continue the same chain.
+        await using (var later = new WaylornDbContext(options, new TenantScope(org), integrity))
+        {
+            AuditWriter.Add(later, "b", "four", "asset", Guid.NewGuid(), null);
+            await later.SaveChangesAsync();
+        }
+        if (tamper != "none")
+            await using (var command = connection.CreateCommand())
+            {
+                command.CommandText = tamper;
+                await command.ExecuteNonQueryAsync();
+            }
+
+        await using var db = new WaylornDbContext(options, new TenantScope(org), integrity);
+        var report = await AuditChain.VerifyAsync(db, CancellationToken.None);
+        if (tamper == "none")
+        {
+            Assert.Equal("intact", report.State);
+            Assert.Equal(4, report.Checked);
+            Assert.Equal(4, report.HeadSequence);
+            var fourth = await db.Audit.SingleAsync(x => x.ChainSequence == 4);
+            Assert.Equal((await db.Audit.SingleAsync(x => x.ChainSequence == 3)).IntegrityTag, fourth.PreviousTag);
+            // Without keys the structure still checks out, but it cannot be called intact.
+            await using var keyless = new WaylornDbContext(options, new TenantScope(org));
+            Assert.Equal("unverified", (await AuditChain.VerifyAsync(keyless, CancellationToken.None)).State);
+            return;
+        }
+        Assert.Equal("broken", report.State);
+        Assert.Equal(new AuditChainBreak(at, outcome), report.FirstBreak);
+    }
+
+    [Fact]
+    public async Task Audit_records_are_append_only_through_the_context()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<WaylornDbContext>().UseSqlite(connection).Options;
+        var org = Guid.NewGuid();
+        await using var db = new WaylornDbContext(options, new TenantScope(org));
+        await db.Database.EnsureCreatedAsync();
+        AuditWriter.Add(db, "a", "one", "asset", Guid.NewGuid(), null);
+        Assert.Throws<InvalidOperationException>(() => db.SaveChanges());
+        await db.SaveChangesAsync();
+        var record = await db.Audit.SingleAsync();
+        record.Outcome = "denied";
+        await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
+        db.Entry(record).State = EntityState.Deleted;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
+    }
+
+    private static AuditIntegrity SigningIntegrity() => AuditIntegrity.FromConfiguration(
+        new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Audit:KeyId"] = "test-v1",
+            ["Audit:SigningKey"] = Convert.ToBase64String(Enumerable.Repeat((byte)42, 32).ToArray())
+        }).Build(), required: true);
+
     [Fact]
     public async Task Cross_tenant_write_is_rejected_before_database_access()
     {

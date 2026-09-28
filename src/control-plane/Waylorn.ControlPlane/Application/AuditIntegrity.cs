@@ -75,10 +75,19 @@ public sealed class AuditIntegrity
         return key;
     }
 
-    private static byte[] Canonical(AuditRecord record) => JsonSerializer.SerializeToUtf8Bytes(new
-    {
-        version = 1, record.Id, record.OrganizationId, record.SiteId,
-        record.Principal, record.Action, record.TargetType, record.TargetId,
-        record.Outcome, atUtc = record.AtUtc.ToUniversalTime().ToString("O")
-    });
+    // Version 2 binds the chain position and predecessor, so moving or relinking a record breaks its tag.
+    private static byte[] Canonical(AuditRecord record) => record.ChainSequence is null
+        ? JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            version = 1, record.Id, record.OrganizationId, record.SiteId,
+            record.Principal, record.Action, record.TargetType, record.TargetId,
+            record.Outcome, atUtc = record.AtUtc.ToUniversalTime().ToString("O")
+        })
+        : JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            version = 2, record.Id, record.OrganizationId, record.SiteId,
+            record.Principal, record.Action, record.TargetType, record.TargetId,
+            record.Outcome, atUtc = record.AtUtc.ToUniversalTime().ToString("O"),
+            sequence = record.ChainSequence, previous = record.PreviousTag
+        });
 }

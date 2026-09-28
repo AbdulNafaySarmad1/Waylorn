@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
+﻿CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
     "MigrationId" character varying(150) NOT NULL,
     "ProductVersion" character varying(32) NOT NULL,
     CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY ("MigrationId")
@@ -497,3 +497,48 @@ BEGIN
     END IF;
 END $EF$;
 COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928075920_AddAuditChain') THEN
+    ALTER TABLE "Audit" ADD "ChainSequence" bigint;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928075920_AddAuditChain') THEN
+    ALTER TABLE "Audit" ADD "PreviousTag" character varying(64);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928075920_AddAuditChain') THEN
+    CREATE TABLE "AuditHeads" (
+        "OrganizationId" uuid NOT NULL,
+        "Sequence" bigint NOT NULL,
+        "Tag" character varying(64),
+        CONSTRAINT "PK_AuditHeads" PRIMARY KEY ("OrganizationId")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928075920_AddAuditChain') THEN
+    CREATE UNIQUE INDEX "IX_Audit_OrganizationId_ChainSequence" ON "Audit" ("OrganizationId", "ChainSequence");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928075920_AddAuditChain') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260928075920_AddAuditChain', '10.0.9');
+    END IF;
+END $EF$;
+COMMIT;
+
