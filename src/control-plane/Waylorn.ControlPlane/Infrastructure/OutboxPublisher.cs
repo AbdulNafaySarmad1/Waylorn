@@ -13,35 +13,51 @@ public sealed class OutboxPublisher(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (destination != OutboxDestination.Audit)
+        while (!stoppingToken.IsCancellationRequested)
         {
-            await using var nats = new NatsClient(new NatsOpts { Url = configuration["Eventing:NatsUrl"]! });
-            var jetStream = nats.CreateJetStreamContext();
-            if (configuration.GetValue<bool>("Eventing:BootstrapDestinations"))
-                await jetStream.CreateOrUpdateStreamAsync(destination == OutboxDestination.Control
-                    ? new StreamConfig("WAYLORN_CONTROL", ["waylorn.control.v1.>"])
-                    : new StreamConfig("WAYLORN_OPERATIONS", ["waylorn.operation.v1.>"]), stoppingToken);
-            await PollAsync(async (message, ct) =>
+            try
             {
-                var headers = new NatsHeaders { ["Nats-Msg-Id"] = message.Id.ToString() };
-                await jetStream.PublishAsync(message.Subject, message.Payload,
-                    headers: headers, cancellationToken: ct);
-            }, stoppingToken);
-        }
-        else
-        {
-            using var kafka = new ProducerBuilder<string, string>(new ProducerConfig
+                if (destination != OutboxDestination.Audit)
+                {
+                    await using var nats = new NatsClient(new NatsOpts { Url = configuration["Eventing:NatsUrl"]! });
+                    var jetStream = nats.CreateJetStreamContext();
+                    if (configuration.GetValue<bool>("Eventing:BootstrapDestinations"))
+                        await jetStream.CreateOrUpdateStreamAsync(destination == OutboxDestination.Control
+                            ? new StreamConfig("WAYLORN_CONTROL", ["waylorn.control.v1.>"])
+                            : new StreamConfig("WAYLORN_OPERATIONS", ["waylorn.operation.v1.>"]), stoppingToken);
+                    await PollAsync(async (message, ct) =>
+                    {
+                        var headers = new NatsHeaders { ["Nats-Msg-Id"] = message.Id.ToString() };
+                        await jetStream.PublishAsync(message.Subject, message.Payload,
+                            headers: headers, cancellationToken: ct);
+                    }, stoppingToken);
+                }
+                else
+                {
+                    using var kafka = new ProducerBuilder<string, string>(new ProducerConfig
+                    {
+                        BootstrapServers = configuration["Eventing:KafkaBootstrapServers"],
+                        EnableIdempotence = true,
+                        Acks = Acks.All,
+                        MessageTimeoutMs = 10_000
+                    }).Build();
+                    await PollAsync(async (message, ct) =>
+                    {
+                        await kafka.ProduceAsync(message.Subject,
+                            new Message<string, string> { Key = message.Id.ToString(), Value = message.Payload }, ct);
+                    }, stoppingToken);
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                BootstrapServers = configuration["Eventing:KafkaBootstrapServers"],
-                EnableIdempotence = true,
-                Acks = Acks.All,
-                MessageTimeoutMs = 10_000
-            }).Build();
-            await PollAsync(async (message, ct) =>
+                break;
+            }
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
-                await kafka.ProduceAsync(message.Subject,
-                    new Message<string, string> { Key = message.Id.ToString(), Value = message.Payload }, ct);
-            }, stoppingToken);
+                logger.LogError(ex, "{Destination} outbox publisher setup failed; retrying", destination);
+                try { await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken); }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            }
         }
     }
 
