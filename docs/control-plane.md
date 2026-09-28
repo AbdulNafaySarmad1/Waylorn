@@ -50,6 +50,7 @@ Set `Cache:Endpoint` to enable Valkey for 30-second asset-detail reads. Authoriz
 | `GET /api/v1/audit` | Administrator-only, site-scoped audit rows with optional target filter and stable cursor pagination (up to 100). |
 | `GET /api/v1/audit/{id}` | Administrator-only record lookup with tenant/site enforcement. |
 | `GET /api/v1/audit/{id}/verify` | Administrator-only HMAC check of an individual record: verified, unverified, or broken. |
+| `GET /api/v1/operations/outbox` | Administrator-only, tenant/site-scoped pending counts, retrying counts, and oldest pending time by broker destination. No event payloads. |
 | `POST /api/v1/observations` | SiteAgent workload only; bounded, versioned read-only Modbus observation batch with idempotent retry. Raw ingest is disabled unless explicitly enabled at a site-local deployment. |
 | `POST /api/v1/site-agents/heartbeat` | SiteAgent workload only; records a bounded, versioned site gateway heartbeat with server receive time and spool depth. |
 | `POST/GET /api/v1/incidents`, `GET/PATCH /api/v1/incidents/{id}` | Site-scoped incident creation, asset links, read, and versioned state transition. |
@@ -74,6 +75,8 @@ The frontend also uses a read-only `/api/v0` adapter:
 Raw telemetry ingestion requires `Telemetry:AcceptRawObservations=true`, set only where the PostgreSQL instance is a customer-controlled site-local store. The default is disabled. `Telemetry:RetentionDays` defaults to 7 and must be 1–365; startup rejects other values. Ingestion and queries apply the same window, and an hourly worker removes expired samples. Reducing retention makes older spooled observations unreplayable, so site administrators must coordinate the gateway spool policy. This numeric register pilot does not provide Redpanda telemetry streaming, calibrated units, or sensor quality certification.
 
 Set `Audit:KeyId` and a base64 `Audit:SigningKey` containing at least 32 random bytes through secrets management. They are required outside Development. New records receive an HMAC-SHA256 tag; old unsigned rows remain unverified. Verification protects individual row contents only. Preserve historical keys and monitor missing/broken verification; row deletion and ordering require an external immutable evidence pipeline.
+
+Monitor `/health/eventing` and the scoped `/api/v1/operations/outbox` endpoint together. Broker reachability can recover before queued records drain; sustained pending age or retry growth needs investigation. Neither endpoint proves downstream consumer delivery.
 
 Registry assets have no tag, lifecycle, or measured health fields yet. The adapter emits an `UNASSIGNED-{id}` display tag and explicit `unknown` state. Site connectivity is `unknown` before the first heartbeat, `disconnected` when stale, `degraded` when observations are queued, and `connected` otherwise. It describes gateway contact, not OT equipment health or capability. Offset pagination is not stable across concurrent inventory changes; use the `/api/v1` audit cursor for stable audit browsing.
 

@@ -107,6 +107,7 @@ app.MapGet("/health/eventing", async (EventingReadiness eventing, CancellationTo
 var api = app.MapGroup("/api/v1").RequireAuthorization().RequireRateLimiting("api");
 api.MapTenancyEndpoints();
 api.MapAuditEndpoints();
+api.MapOutboxStatusEndpoints();
 var frontend = app.MapGroup("/api/v0").RequireAuthorization().RequireRateLimiting("api");
 frontend.MapFrontendEndpoints();
 frontend.MapTelemetryEndpoints();

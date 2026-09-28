@@ -285,6 +285,18 @@ public class ApiTests
         Assert.Equal(org, eventPayload.RootElement.GetProperty("organizationId").GetGuid());
         var audited = await ownerDb.Audit.FirstAsync(x => x.SiteId == site);
         SetIdentity(client, org, site, "Administrator", "admin");
+        var outbox = await client.GetFromJsonAsync<JsonElement>("/api/v1/operations/outbox");
+        var outboxItems = outbox.GetProperty("items").EnumerateArray().ToArray();
+        Assert.Equal(3, outboxItems.Length);
+        var auditQueue = outboxItems.Single(x => x.GetProperty("destination").GetString() == "Audit");
+        Assert.Equal(await ownerDb.Outbox.CountAsync(x => x.SiteId == site &&
+            x.Destination == Waylorn.ControlPlane.Domain.OutboxDestination.Audit),
+            auditQueue.GetProperty("pending").GetInt32());
+        Assert.NotEqual(JsonValueKind.Null, auditQueue.GetProperty("oldestPendingAt").ValueKind);
+        SetIdentity(client, org, site, "Viewer", "viewer");
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.GetAsync("/api/v1/operations/outbox")).StatusCode);
+        SetIdentity(client, org, site, "Administrator", "admin");
         var integrity = await client.GetFromJsonAsync<JsonElement>($"/api/v1/audit/{audited.Id}/verify");
         Assert.Equal("verified", integrity.GetProperty("state").GetString());
     }
