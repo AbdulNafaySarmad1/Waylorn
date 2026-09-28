@@ -49,7 +49,10 @@ dotnet test Waylorn.slnx
 pnpm typecheck && pnpm lint && pnpm test
 pnpm --filter @waylorn/web build && pnpm --filter @waylorn/web e2e
 cargo test --manifest-path crates/ot-core/Cargo.toml --offline
+go test ./...   # from src/network-plane/waylorn-gateway
 ```
+
+Set `WAYLORN_TEST_POSTGRES` to a disposable PostgreSQL connection string to also run the migration and audit-chain concurrency tests; the test drops and recreates that database.
 
 On Windows without the MSVC linker, run the Rust tests with `--target x86_64-pc-windows-gnu`.
 
