@@ -38,6 +38,9 @@ public sealed class WaylornDbContext : DbContext
     public DbSet<IncidentAsset> IncidentAssets => Set<IncidentAsset>();
     public DbSet<MaintenanceWorkOrder> WorkOrders => Set<MaintenanceWorkOrder>();
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
+    public DbSet<EgressDestination> EgressDestinations => Set<EgressDestination>();
+    public DbSet<EgressPolicy> EgressPolicies => Set<EgressPolicy>();
+    public DbSet<EgressRecord> EgressRecords => Set<EgressRecord>();
 
     public DbSet<AuditChainHead> AuditHeads => Set<AuditChainHead>();
 
@@ -251,6 +254,41 @@ public sealed class WaylornDbContext : DbContext
             e.Property(x => x.CreatedBy).HasMaxLength(200);
             e.Property(x => x.Version).IsConcurrencyToken();
             e.HasIndex(x => new { x.OrganizationId, x.SiteId, x.AssetId });
+            e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
+        });
+        model.Entity<EgressDestination>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasAlternateKey(x => new { x.OrganizationId, x.Id });
+            e.Property(x => x.DisplayName).HasMaxLength(200);
+            e.Property(x => x.ProviderClass).HasMaxLength(40);
+            e.Property(x => x.Endpoint).HasMaxLength(500);
+            e.Property(x => x.Model).HasMaxLength(200);
+            e.Property(x => x.Locality).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.ClassificationCeiling).HasConversion<string>().HasMaxLength(20);
+            e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
+        });
+        model.Entity<EgressPolicy>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasOne<EgressDestination>().WithMany().HasForeignKey(x => new { x.OrganizationId, x.DestinationId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.OrganizationId, x.DestinationId }).IsUnique();
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.Property(x => x.Rules).HasMaxLength(20_000);
+            e.Property(x => x.UpdatedBy).HasMaxLength(200);
+            e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
+        });
+        model.Entity<EgressRecord>(e =>
+        {
+            // No foreign key: a decision for an unknown destination is recorded, not rejected.
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Categories).HasMaxLength(300);
+            e.Property(x => x.Decision).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.Reason).HasMaxLength(60);
+            e.Property(x => x.Actor).HasMaxLength(200);
+            e.Property(x => x.ActorType).HasMaxLength(20);
+            e.HasIndex(x => new { x.OrganizationId, x.AtUtc });
             e.HasQueryFilter(x => x.OrganizationId == OrganizationId);
         });
         model.Entity<OutboxMessage>(e =>

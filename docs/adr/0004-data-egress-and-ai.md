@@ -1,6 +1,6 @@
 # ADR 0004: Local-first sensitive data and single AI gateway
 
-Date: 2026-09-27. Status: accepted as trust-boundary constraint; policy engine not implemented.
+Date: 2026-09-27. Status: accepted as trust-boundary constraint; the classification and egress decision gate is ADR 0035, and the AI gateway is not implemented.
 
 ## Decision
 

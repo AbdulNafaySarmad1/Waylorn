@@ -574,3 +574,86 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928082922_AddClassifiedEgress') THEN
+    CREATE TABLE "EgressDestinations" (
+        "Id" uuid NOT NULL,
+        "OrganizationId" uuid NOT NULL,
+        "DisplayName" character varying(200) NOT NULL,
+        "ProviderClass" character varying(40) NOT NULL,
+        "Endpoint" character varying(500) NOT NULL,
+        "Model" character varying(200) NOT NULL,
+        "Locality" character varying(20) NOT NULL,
+        "ClassificationCeiling" character varying(20) NOT NULL,
+        "Enabled" boolean NOT NULL,
+        "CreatedUtc" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_EgressDestinations" PRIMARY KEY ("Id"),
+        CONSTRAINT "AK_EgressDestinations_OrganizationId_Id" UNIQUE ("OrganizationId", "Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928082922_AddClassifiedEgress') THEN
+    CREATE TABLE "EgressRecords" (
+        "Id" uuid NOT NULL,
+        "OrganizationId" uuid NOT NULL,
+        "DestinationId" uuid NOT NULL,
+        "AtUtc" timestamp with time zone NOT NULL,
+        "Categories" character varying(300) NOT NULL,
+        "Decision" character varying(20) NOT NULL,
+        "Reason" character varying(60) NOT NULL,
+        "PolicyVersion" bigint NOT NULL,
+        "Actor" character varying(200) NOT NULL,
+        "ActorType" character varying(20) NOT NULL,
+        "Bytes" integer NOT NULL,
+        "RedactedFieldCount" integer NOT NULL,
+        CONSTRAINT "PK_EgressRecords" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928082922_AddClassifiedEgress') THEN
+    CREATE TABLE "EgressPolicies" (
+        "Id" uuid NOT NULL,
+        "OrganizationId" uuid NOT NULL,
+        "DestinationId" uuid NOT NULL,
+        "Version" bigint NOT NULL,
+        "Rules" character varying(20000) NOT NULL,
+        "UpdatedUtc" timestamp with time zone NOT NULL,
+        "UpdatedBy" character varying(200) NOT NULL,
+        CONSTRAINT "PK_EgressPolicies" PRIMARY KEY ("Id"),
+        CONSTRAINT "FK_EgressPolicies_EgressDestinations_OrganizationId_Destinatio~" FOREIGN KEY ("OrganizationId", "DestinationId") REFERENCES "EgressDestinations" ("OrganizationId", "Id") ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928082922_AddClassifiedEgress') THEN
+    CREATE UNIQUE INDEX "IX_EgressPolicies_OrganizationId_DestinationId" ON "EgressPolicies" ("OrganizationId", "DestinationId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928082922_AddClassifiedEgress') THEN
+    CREATE INDEX "IX_EgressRecords_OrganizationId_AtUtc" ON "EgressRecords" ("OrganizationId", "AtUtc");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260928082922_AddClassifiedEgress') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260928082922_AddClassifiedEgress', '10.0.9');
+    END IF;
+END $EF$;
+COMMIT;
+

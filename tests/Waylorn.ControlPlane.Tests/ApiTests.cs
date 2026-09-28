@@ -356,6 +356,116 @@ public class ApiTests
         Assert.Equal(23, chain.GetProperty("checked").GetInt64());
     }
 
+    [Fact]
+    public async Task Egress_is_denied_by_default_and_follows_the_classified_policy()
+    {
+        await using var sqlite = new SqliteConnection("Data Source=:memory:");
+        await sqlite.OpenAsync();
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
+        {
+            host.UseSetting("Authentication:Authority", "https://keycloak.example.test/realms/waylorn");
+            host.UseSetting("Authentication:Audience", "waylorn-api");
+            host.UseSetting("ConnectionStrings:Waylorn", "Host=localhost;Database=unused");
+            host.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<WaylornDbContext>>();
+                services.RemoveAll<IDbContextOptionsConfiguration<WaylornDbContext>>();
+                services.AddDbContext<WaylornDbContext>(options => options.UseSqlite(sqlite));
+                services.AddAuthentication(options =>
+                {
+                    options.DefaultAuthenticateScheme = "Test";
+                    options.DefaultChallengeScheme = "Test";
+                    options.DefaultForbidScheme = "Test";
+                }).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", _ => { });
+            });
+        });
+        using var client = factory.CreateClient();
+        using (var scope = factory.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<WaylornDbContext>().Database.EnsureCreatedAsync();
+        var org = Guid.NewGuid();
+        void As(string role, string subject, bool mfa = true, bool orgWide = true)
+        {
+            SetIdentity(client, org, Guid.NewGuid(), role, subject, mfa);
+            if (!orgWide) return;
+            client.DefaultRequestHeaders.Remove("X-Test-Site");
+            client.DefaultRequestHeaders.Add("X-Test-Site", "*");
+        }
+        async Task<JsonElement> Decide(Guid destination, params string[] categories)
+        {
+            var response = await client.PostAsJsonAsync("/api/v1/egress/decisions",
+                new { destinationId = destination, categories, bytes = 2048, redactedFieldCount = 3 });
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            return await response.Content.ReadFromJsonAsync<JsonElement>();
+        }
+        var provider = new { displayName = "Hosted model", providerClass = "anthropic", endpoint = "https://llm.example.test/v1",
+            model = "test-model", locality = "external", classificationCeiling = "confidential", enabled = true };
+
+        As("Administrator", "admin", mfa: false);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/v1/egress/destinations", provider)).StatusCode);
+        As("Administrator", "site-admin", orgWide: false);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/v1/egress/destinations", provider)).StatusCode);
+        As("Administrator", "admin");
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/v1/egress/destinations",
+            provider with { endpoint = "http://llm.example.test/v1" })).StatusCode);
+        var created = await client.PostAsJsonAsync("/api/v1/egress/destinations", provider);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var destination = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        As("Viewer", "viewer", mfa: false);
+        var denied = await Decide(destination, "asset_inventory");
+        Assert.Equal("blocked", denied.GetProperty("decision").GetString());
+        Assert.Equal("category-not-allowed", denied.GetProperty("reason").GetString());
+        var policies = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/ai/policies");
+        var policy = policies.GetProperty("items")[0];
+        Assert.Equal("1", policy.GetProperty("version").GetString());
+        var policyUrl = $"/api/v0/orgs/{org}/ai/policies/{policy.GetProperty("id").GetGuid()}";
+        var rules = new
+        {
+            allowedCategories = new[] { "asset_inventory", "raw_telemetry" }, prohibitedCategories = new[] { "personal_data" },
+            redaction = new { enabled = true, fields = new[] { "serial" } },
+            pseudonymization = new { enabled = true, scopes = new[] { "sites", "assets" } },
+            aggregation = new { enabled = false }, approval = new { required = false },
+            retention = new { localTranscriptDays = 30, providerRetention = "zero retention" }
+        };
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync(policyUrl, rules)).StatusCode);
+
+        As("Administrator", "admin");
+        Assert.Equal((HttpStatusCode)428, (await client.PutAsJsonAsync(policyUrl, rules)).StatusCode);
+        client.DefaultRequestHeaders.Add("If-Match", "\"5\"");
+        Assert.Equal(HttpStatusCode.PreconditionFailed, (await client.PutAsJsonAsync(policyUrl, rules)).StatusCode);
+        client.DefaultRequestHeaders.Remove("If-Match");
+        client.DefaultRequestHeaders.Add("If-Match", "\"1\"");
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync(policyUrl,
+            rules with { prohibitedCategories = new[] { "asset_inventory" } })).StatusCode);
+        var updated = await client.PutAsJsonAsync(policyUrl, rules);
+        Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
+        Assert.Equal("2", (await updated.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("version").GetString());
+        client.DefaultRequestHeaders.Remove("If-Match");
+
+        As("Viewer", "viewer", mfa: false);
+        var allowed = await Decide(destination, "asset_inventory");
+        Assert.Equal("allowed", allowed.GetProperty("decision").GetString());
+        Assert.Equal(2, allowed.GetProperty("policyVersion").GetInt64());
+        Assert.True(allowed.GetProperty("obligations").GetProperty("redaction").GetProperty("enabled").GetBoolean());
+        // Allowed by policy, but raw telemetry is restricted and this destination's ceiling is confidential.
+        Assert.Equal("above-classification-ceiling", (await Decide(destination, "raw_telemetry")).GetProperty("reason").GetString());
+        Assert.Equal("prohibited-category", (await Decide(destination, "asset_inventory", "personal_data")).GetProperty("reason").GetString());
+        Assert.Equal("category-not-allowed", (await Decide(destination, "recipes")).GetProperty("reason").GetString());
+        Assert.Equal("destination-disabled", (await Decide(Guid.NewGuid(), "asset_inventory")).GetProperty("reason").GetString());
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/v1/egress/decisions",
+            new { destinationId = destination, categories = new[] { "everything" }, bytes = 1, redactedFieldCount = 0 })).StatusCode);
+
+        var records = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/ai/egress?limit=4");
+        Assert.Equal(6, records.GetProperty("page").GetProperty("totalEstimate").GetInt32());
+        Assert.Equal("o:4", records.GetProperty("page").GetProperty("nextCursor").GetString());
+        var latest = records.GetProperty("items")[0];
+        Assert.Equal("blocked", latest.GetProperty("decision").GetString());
+        Assert.Equal("external", latest.GetProperty("locality").GetString());
+        Assert.Equal("viewer", latest.GetProperty("actor").GetProperty("subject").GetString());
+        var providers = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/ai/providers");
+        Assert.Equal("confidential", providers.GetProperty("items")[0].GetProperty("classificationCeiling").GetString());
+    }
+
     private static async Task<Guid> CreateAsset(HttpClient client, Guid site, string name, string kind = "Industrial")
     {
         var response = await client.PostAsJsonAsync("/api/v1/assets", new { siteId = site, kind, name });

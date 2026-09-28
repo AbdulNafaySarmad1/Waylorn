@@ -301,6 +301,36 @@ public class ControlPlaneTests
         else Assert.True(total <= budget + 1e-9, $"{total} polls/min exceeds {budget}");
     }
 
+    [Fact]
+    public void Egress_gate_denies_unless_every_rule_admits_the_transfer()
+    {
+        var open = new EgressDestination { Enabled = true, ClassificationCeiling = DataClassification.Confidential };
+        var rules = EgressRules.DenyAll with
+        {
+            AllowedCategories = ["asset_inventory", "topology", "plc_configuration"],
+            ProhibitedCategories = ["personal_data"], Approval = new(false, null)
+        };
+        Assert.Equal((EgressDecision.Allowed, "policy-allowed"),
+            EgressGate.Decide(open, rules, [DataCategory.AssetInventory, DataCategory.Topology]));
+        Assert.Equal("destination-disabled", EgressGate.Decide(null, rules, [DataCategory.AssetInventory]).Reason);
+        Assert.Equal("destination-disabled",
+            EgressGate.Decide(new EgressDestination { Enabled = false }, rules, [DataCategory.AssetInventory]).Reason);
+        Assert.Equal("no-policy", EgressGate.Decide(open, null, [DataCategory.AssetInventory]).Reason);
+        Assert.Equal("category-not-allowed", EgressGate.Decide(open, EgressRules.DenyAll, [DataCategory.AssetInventory]).Reason);
+        Assert.Equal("prohibited-category",
+            EgressGate.Decide(open, rules, [DataCategory.AssetInventory, DataCategory.PersonalData]).Reason);
+        Assert.Equal("above-classification-ceiling", EgressGate.Decide(open, rules, [DataCategory.PlcConfiguration]).Reason);
+        Assert.Equal((EgressDecision.PendingApproval, "approval-required"),
+            EgressGate.Decide(open, rules with { Approval = new(true, "Administrator") }, [DataCategory.Topology]));
+        Assert.All(new[] { DataCategory.RawTelemetry, DataCategory.PlcConfiguration, DataCategory.Recipes },
+            x => Assert.Equal(DataClassification.Restricted, EgressGate.Classify(x)));
+        Assert.True(EgressGate.Valid(rules));
+        Assert.False(EgressGate.Valid(rules with { ProhibitedCategories = ["topology"] }));
+        Assert.False(EgressGate.Valid(rules with { AllowedCategories = ["everything"] }));
+        Assert.False(EgressGate.Valid(rules with { Aggregation = new(true, 1) }));
+        Assert.False(EgressGate.Valid(rules with { Redaction = null! }));
+    }
+
     private static AuditIntegrity SigningIntegrity() => AuditIntegrity.FromConfiguration(
         new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {

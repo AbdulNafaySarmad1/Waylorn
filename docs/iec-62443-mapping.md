@@ -11,7 +11,7 @@ Status: preliminary engineering traceability, **not** a conformance statement or
 | 4-2 component identification/authentication (IAC) | Device/workload identity, Keycloak federation, certificates, short-lived credentials | Not implemented |
 | 4-2 use control (UC) | RBAC+ABAC, explicit capability declaration, human approval and audit for consequential actions | Rust non-GREEN denial; .NET role/site checks and approval records; full policy not implemented |
 | 4-2 system integrity (SI) | Signed releases, parser hardening, config integrity, tamper-evident evidence | Not implemented |
-| 4-2 data confidentiality (DC) | Local-first classification, encryption, approved egress | Not implemented |
+| 4-2 data confidentiality (DC) | Local-first classification, encryption, approved egress | Partial: classified default-deny egress decisions with audit (ADR 0035); encryption and gateway enforcement not implemented |
 | 4-2 restricted data flow (RDF) | Zones/conduits, outbound site tunnel, no direct cloud/PLC routing | Design only |
 | 4-2 timely response to events (TRE) | Audit, health, alert routing, incident runbooks | Design only |
 | 4-2 resource availability (RA) | Bounded queues, local autonomy, fail-safe operation, recovery drills | Design only |

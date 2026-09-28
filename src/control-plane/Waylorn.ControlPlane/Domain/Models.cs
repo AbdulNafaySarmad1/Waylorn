@@ -231,3 +231,61 @@ public static class CommandPolicy
         !string.IsNullOrWhiteSpace(command.ChangeTicket) &&
         command.WindowStartUtc <= now && now <= command.WindowEndUtc;
 }
+
+// Ordered: a destination's ceiling admits every class at or below it.
+public enum DataClassification { Public, Internal, Confidential, Restricted }
+
+public enum DataCategory
+{
+    AssetInventory, Topology, TelemetryAggregates, RawTelemetry, PlcConfiguration, Recipes,
+    SecurityEvents, NetworkDetails, PersonalData, AuditRecords, MaintenanceRecords, ReliabilityMetrics
+}
+
+public enum DataLocality { OnPremises, CustomerCloud, External }
+
+public enum EgressDecision { Allowed, Blocked, PendingApproval }
+
+// A system outside the control plane that may receive data: a model provider, analytics store, or integration.
+public sealed class EgressDestination : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public string DisplayName { get; set; } = "";
+    public string ProviderClass { get; set; } = "";
+    public string Endpoint { get; set; } = "";
+    public string Model { get; set; } = "";
+    public DataLocality Locality { get; set; }
+    public DataClassification ClassificationCeiling { get; set; }
+    public bool Enabled { get; set; }
+    public DateTimeOffset CreatedUtc { get; set; }
+}
+
+// One versioned policy per destination. Rules holds the contract's AiDataPolicyUpdate body as JSON;
+// the gate reads its category lists and approval flag.
+public sealed class EgressPolicy : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid DestinationId { get; set; }
+    public long Version { get; set; }
+    public string Rules { get; set; } = "";
+    public DateTimeOffset UpdatedUtc { get; set; }
+    public string UpdatedBy { get; set; } = "";
+}
+
+// Every gate decision, including blocked and pending ones, so the record shows what was attempted.
+public sealed class EgressRecord : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid DestinationId { get; set; }
+    public DateTime AtUtc { get; set; }
+    public string Categories { get; set; } = "";
+    public EgressDecision Decision { get; set; }
+    public string Reason { get; set; } = "";
+    public long PolicyVersion { get; set; }
+    public string Actor { get; set; } = "";
+    public string ActorType { get; set; } = "";
+    public int Bytes { get; set; }
+    public int RedactedFieldCount { get; set; }
+}

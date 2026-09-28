@@ -131,12 +131,14 @@ frontend.MapMaintenanceFrontendEndpoints();
 frontend.MapTopologyEndpoints();
 frontend.MapActionFrontendEndpoints();
 frontend.MapOverviewEndpoints();
+frontend.MapEgressFrontendEndpoints();
 api.MapAssetEndpoints();
 api.MapCommandEndpoints();
 api.MapObservationEndpoints();
 api.MapSiteAgentEndpoints();
 api.MapIncidentEndpoints();
 api.MapMaintenanceEndpoints();
+api.MapEgressEndpoints();
 app.Run();
 
 public partial class Program;
