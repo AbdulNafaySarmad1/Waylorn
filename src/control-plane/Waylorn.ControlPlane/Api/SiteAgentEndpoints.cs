@@ -11,7 +11,7 @@ public sealed record SiteAgentHeartbeatInput(int SchemaVersion, Guid SiteId, int
 public static class SiteAgentEndpoints
 {
     public static void MapSiteAgentEndpoints(this RouteGroupBuilder api) =>
-        api.MapPost("/site-agents/heartbeat", Heartbeat);
+        api.MapPost("/site-agents/heartbeat", Heartbeat).RequireRateLimiting("site-heartbeat");
 
     private static async Task<IResult> Heartbeat(SiteAgentHeartbeatInput input, HttpContext http,
         WaylornDbContext db, CancellationToken ct)

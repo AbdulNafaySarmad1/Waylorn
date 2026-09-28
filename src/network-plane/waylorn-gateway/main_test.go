@@ -57,6 +57,39 @@ func TestSpoolRetainsOutageAndDrainsAfterAcknowledgement(t *testing.T) {
 	}
 }
 
+func TestObservationRateLimitPausesReplayWithoutDroppingBatch(t *testing.T) {
+	dir := t.TempDir()
+	item := observation{SchemaVersion: 1, RequestID: "7e1de57c-80e7-4a9f-887c-040b0672a7fb",
+		SiteID: "site", AssetID: "asset", Source: "site-agent/modbus-tcp",
+		ObservedUtc: time.Now().UTC(), ExpectedIntervalMs: 1000,
+		Values: []sample{{SignalKey: "modbus.holding.10", Value: 42}}}
+	if err := enqueue(dir, item); err != nil {
+		t.Fatal(err)
+	}
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Retry-After", "2")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+	cfg := config{spool: dir, apiURL: server.URL}
+	auth := &tokenProvider{token: "test-token", expires: time.Now().Add(time.Minute)}
+	if err := drain(context.Background(), cfg, server.Client(), auth); err == nil {
+		t.Fatal("rate-limited observation appeared acknowledged")
+	}
+	if err := drain(context.Background(), cfg, server.Client(), auth); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 1 || time.Until(auth.observationRetryAfter) < time.Second {
+		t.Fatal("replay did not honor the API backoff")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("rate-limited observation was lost: %v, %v", entries, err)
+	}
+}
+
 func TestRawObservationsRequireLoopbackApi(t *testing.T) {
 	for name, value := range map[string]string{
 		"WAYLORN_OT_READER":          t.TempDir() + "/ot-observe",

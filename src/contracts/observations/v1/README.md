@@ -19,4 +19,6 @@ The API requires a Keycloak `SiteAgent` workload token with exactly one `site_id
 
 The same site identity reports gateway contact through `POST /api/v1/site-agents/heartbeat` with `{ "schemaVersion": 1, "siteId": "...", "intervalMs": 1000, "spoolDepth": 0 }`. The API stores its own receive time and uses heartbeat freshness for web connectivity. This measures gateway contact and queued observations, not device health.
 
+Observation ingest and heartbeat use separate per-agent request limits (600 and 300 per minute respectively). A 429 includes `Retry-After`; the gateway retains the rejected observation and pauses replay for that bounded interval. Heartbeat capacity remains available even when observation replay is rate limited.
+
 The gateway reads one configured Modbus range and cannot request writes. It keeps unacknowledged batches in a local spool and sends them only to a loopback site-local API. Loopback HTTP needs an explicit development flag. OAuth client credentials are site-scoped; optional client certificate and CA settings are supported. Protect the spool with host disk encryption and local access controls. The current 10,000-file spool limit and configured 1–365 day ingest window (seven days by default) mean a longer outage requires operator recovery before replay. No cloud tunnel, hardware certification, or cross-runtime Protobuf RPC is claimed.

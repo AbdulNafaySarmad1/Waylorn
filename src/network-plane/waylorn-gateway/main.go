@@ -345,6 +345,9 @@ func enqueue(dir string, value observation) error {
 }
 
 func drain(ctx context.Context, c config, client *http.Client, auth *tokenProvider) error {
+	if time.Now().Before(auth.observationRetryAfter) {
+		return nil
+	}
 	entries, err := os.ReadDir(c.spool)
 	if err != nil {
 		return err
@@ -381,6 +384,14 @@ func drain(ctx context.Context, c config, client *http.Client, auth *tokenProvid
 		}
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 256))
 		response.Body.Close()
+		if response.StatusCode == http.StatusTooManyRequests {
+			seconds, err := strconv.Atoi(response.Header.Get("Retry-After"))
+			if err != nil || seconds < 1 {
+				seconds = 1
+			}
+			auth.observationRetryAfter = time.Now().Add(time.Duration(min(seconds, 60)) * time.Second)
+			return errors.New("observation API rate limited replay")
+		}
 		if response.StatusCode != http.StatusAccepted && response.StatusCode != http.StatusOK {
 			return fmt.Errorf("observation API returned %d: %s", response.StatusCode, body)
 		}
@@ -392,10 +403,11 @@ func drain(ctx context.Context, c config, client *http.Client, auth *tokenProvid
 }
 
 type tokenProvider struct {
-	client  *http.Client
-	cfg     config
-	token   string
-	expires time.Time
+	client                *http.Client
+	cfg                   config
+	token                 string
+	expires               time.Time
+	observationRetryAfter time.Time
 }
 
 func (p *tokenProvider) get(ctx context.Context) (string, error) {

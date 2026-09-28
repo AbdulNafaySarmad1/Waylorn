@@ -72,9 +72,24 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = (context, _) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+            context.HttpContext.Response.Headers.RetryAfter =
+                Math.Clamp((int)Math.Ceiling(retryAfter.TotalSeconds), 1, 60).ToString();
+        return ValueTask.CompletedTask;
+    };
+    static string Caller(HttpContext context) =>
+        context.User.FindFirst("sub")?.Value ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     options.AddPolicy("api", context => RateLimitPartition.GetFixedWindowLimiter(
-        context.User.FindFirst("sub")?.Value ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1) }));
+        Caller(context), _ => new FixedWindowRateLimiterOptions
+            { PermitLimit = 120, Window = TimeSpan.FromMinutes(1) }));
+    options.AddPolicy("observations", context => RateLimitPartition.GetFixedWindowLimiter(
+        Caller(context), _ => new FixedWindowRateLimiterOptions
+            { PermitLimit = 600, Window = TimeSpan.FromMinutes(1) }));
+    options.AddPolicy("site-heartbeat", context => RateLimitPartition.GetFixedWindowLimiter(
+        Caller(context), _ => new FixedWindowRateLimiterOptions
+            { PermitLimit = 300, Window = TimeSpan.FromMinutes(1) }));
 });
 builder.Services.AddOpenTelemetry().WithTracing(tracing => tracing.AddAspNetCoreInstrumentation());
 

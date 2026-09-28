@@ -40,6 +40,25 @@ public class ApiTests
         SetIdentity(client, Guid.NewGuid(), Guid.NewGuid(), "SiteAgent", "agent");
         var response = await client.PostAsJsonAsync("/api/v1/observations", new { schemaVersion = 1 });
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        for (var i = 0; i < 130; i++)
+        {
+            var replay = await client.PostAsJsonAsync("/api/v1/observations", new { schemaVersion = 1 });
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, replay.StatusCode);
+        }
+        var heartbeat = await client.PostAsJsonAsync("/api/v1/site-agents/heartbeat",
+            new { schemaVersion = 0, siteId = Guid.Empty, intervalMs = 1000, spoolDepth = 0 });
+        Assert.Equal(HttpStatusCode.BadRequest, heartbeat.StatusCode);
+        for (var i = 1; i < 300; i++)
+        {
+            var repeated = await client.PostAsJsonAsync("/api/v1/site-agents/heartbeat",
+                new { schemaVersion = 0, siteId = Guid.Empty, intervalMs = 1000, spoolDepth = 0 });
+            Assert.Equal(HttpStatusCode.BadRequest, repeated.StatusCode);
+        }
+        var limited = await client.PostAsJsonAsync("/api/v1/site-agents/heartbeat",
+            new { schemaVersion = 0, siteId = Guid.Empty, intervalMs = 1000, spoolDepth = 0 });
+        Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
+        Assert.True(int.TryParse(limited.Headers.GetValues("Retry-After").Single(), out var seconds));
+        Assert.InRange(seconds, 1, 60);
     }
 
     [Fact]

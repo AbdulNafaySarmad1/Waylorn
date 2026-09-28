@@ -10,7 +10,7 @@ namespace Waylorn.ControlPlane.Api;
 public static class ObservationEndpoints
 {
     public static void MapObservationEndpoints(this RouteGroupBuilder api) =>
-        api.MapPost("/observations", Ingest);
+        api.MapPost("/observations", Ingest).RequireRateLimiting("observations");
 
     private static async Task<IResult> Ingest(ObservationBatch input, HttpContext http, IConfiguration config,
         TelemetryPolicy telemetry,
