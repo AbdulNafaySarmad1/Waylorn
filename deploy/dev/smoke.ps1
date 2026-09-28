@@ -25,6 +25,10 @@ $approver = Get-TestToken 'waylorn-approver' $settings.WAYLORN_TEST_APPROVER_PAS
 $site = $settings.WAYLORN_TEST_SITE_ID
 $ready = Invoke-WebRequest -Uri "$Api/health/ready" -SkipHttpErrorCheck
 if ($ready.StatusCode -ne 200) { throw "Readiness returned $($ready.StatusCode)." }
+$eventing = Invoke-WebRequest -Uri "$Api/health/eventing" -SkipHttpErrorCheck
+if ($eventing.StatusCode -ne 200 -or ($eventing.Content | ConvertFrom-Json).status -ne 'ready') {
+    throw "Eventing health returned $($eventing.StatusCode)."
+}
 $organization = Send-Json 'GET' '/api/v1/organization' $admin $null
 if ($organization.StatusCode -eq 404) {
     $createdOrg = Send-Json 'POST' '/api/v1/organization' $admin @{ slug = 'waylorn-local'; name = 'Waylorn Local Lab' }

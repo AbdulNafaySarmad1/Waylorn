@@ -45,6 +45,7 @@ public class ApiTests
     [Fact]
     public async Task Assets_relationships_approval_and_audit_are_enforced_over_http()
     {
+        var identity = new TestIdentityReadiness();
         await using var sqlite = new SqliteConnection("Data Source=:memory:");
         await sqlite.OpenAsync();
         using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
@@ -61,6 +62,8 @@ public class ApiTests
                 services.RemoveAll<DbContextOptions<WaylornDbContext>>();
                 services.RemoveAll<IDbContextOptionsConfiguration<WaylornDbContext>>();
                 services.AddDbContext<WaylornDbContext>(options => options.UseSqlite(sqlite));
+                services.RemoveAll<IIdentityReadiness>();
+                services.AddSingleton<IIdentityReadiness>(identity);
                 services.AddAuthentication(options =>
                 {
                     options.DefaultAuthenticateScheme = "Test";
@@ -77,6 +80,10 @@ public class ApiTests
         var site = Guid.NewGuid();
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/health/live")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/health/ready")).StatusCode);
+        identity.Ready = false;
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await client.GetAsync("/health/ready")).StatusCode);
+        identity.Ready = true;
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/health/eventing")).StatusCode);
         SetIdentity(client, org, site, "Administrator", "admin");
         Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/api/v1/organization",
             new { slug = "test-org", name = "Test Organization" })).StatusCode);
@@ -300,6 +307,12 @@ public class ApiTests
         client.DefaultRequestHeaders.Add("X-Test-Role", role);
         client.DefaultRequestHeaders.Add("X-Test-Subject", subject);
     }
+}
+
+internal sealed class TestIdentityReadiness : IIdentityReadiness
+{
+    public bool Ready { get; set; } = true;
+    public Task<bool> IsReady(CancellationToken ct) => Task.FromResult(Ready);
 }
 
 internal sealed class TestAuthHandler(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)

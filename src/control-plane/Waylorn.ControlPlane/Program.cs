@@ -28,6 +28,13 @@ builder.Services.AddScoped(sp =>
     return new TenantScope(principal is null ? Guid.Empty : AccessPolicy.OrganizationId(principal));
 });
 builder.Services.AddDbContext<WaylornDbContext>(options => options.UseNpgsql(connection));
+builder.Services.AddHttpClient("identity-readiness", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(3);
+    client.MaxResponseContentBufferSize = 64 * 1024;
+});
+builder.Services.AddSingleton<IIdentityReadiness, IdentityReadiness>();
+builder.Services.AddSingleton<EventingReadiness>();
 builder.Services.AddSingleton(AuditIntegrity.FromConfiguration(builder.Configuration,
     required: !builder.Environment.IsDevelopment()));
 builder.Services.AddSingleton<AssetCache>();
@@ -79,8 +86,23 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "live" }));
-app.MapGet("/health/ready", async (WaylornDbContext db, CancellationToken ct) =>
-    await db.Database.CanConnectAsync(ct) ? Results.Ok(new { status = "ready" }) : Results.StatusCode(503));
+app.MapGet("/health/ready", async (WaylornDbContext db, IIdentityReadiness identity, CancellationToken ct) =>
+{
+    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+    timeout.CancelAfter(TimeSpan.FromSeconds(3));
+    try
+    {
+        return await db.Database.CanConnectAsync(timeout.Token) && await identity.IsReady(timeout.Token)
+            ? Results.Ok(new { status = "ready" }) : Results.StatusCode(503);
+    }
+    catch (Exception) when (!ct.IsCancellationRequested)
+    {
+        return Results.StatusCode(503);
+    }
+});
+app.MapGet("/health/eventing", async (EventingReadiness eventing, CancellationToken ct) =>
+    !eventing.Enabled ? Results.Ok(new { status = "disabled" }) :
+    await eventing.IsReady(ct) ? Results.Ok(new { status = "ready" }) : Results.StatusCode(503));
 
 var api = app.MapGroup("/api/v1").RequireAuthorization().RequireRateLimiting("api");
 api.MapTenancyEndpoints();
