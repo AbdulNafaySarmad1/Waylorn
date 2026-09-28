@@ -46,6 +46,7 @@ Set `Cache:Endpoint` to enable Valkey for 30-second asset-detail reads. Authoriz
 | `GET /api/v0/orgs/{orgId}/topology/neighborhood` | Site-scoped, bounded relationship traversal for the web graph. |
 | `GET /api/v0/orgs/{orgId}/topology/impact` | Site-scoped upstream/downstream traversal over explicit dependency relations. |
 | `GET /api/v0/orgs/{orgId}/assets/{assetId}/actions` | Returns an empty list after authorization because there is no executable action transport or site capability evidence. |
+| `GET /api/v0/orgs/{orgId}/overview` | Site-scoped asset, incident, telemetry freshness, and eligible approval counts. Health and link state remain unknown until verified. |
 | `GET /api/v1/audit` | Administrator-only, site-scoped audit rows with optional target filter and stable cursor pagination (up to 100). |
 | `GET /api/v1/audit/{id}` | Administrator-only record lookup with tenant/site enforcement. |
 | `POST /api/v1/observations` | SiteAgent workload only; bounded, versioned read-only Modbus observation batch with idempotent retry. Raw ingest is disabled unless explicitly enabled at a site-local deployment. |

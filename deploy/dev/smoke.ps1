@@ -148,6 +148,12 @@ $incident = Send-Json 'POST' '/api/v1/incidents' $admin @{
 }
 if ($incident.StatusCode -ne 201) { throw "Incident creation returned $($incident.StatusCode): $($incident.Content)" }
 $incidentId = ($incident.Content | ConvertFrom-Json).id
+$overview = Send-Json 'GET' "/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/overview" $admin $null
+$siteOverview = ($overview.Content | ConvertFrom-Json).sites | Where-Object { $_.site.id -eq $site }
+if ($overview.StatusCode -ne 200 -or -not $siteOverview -or $siteOverview.openIncidents.notice -lt 1 -or
+    $siteOverview.assetHealth.unknown -lt 1) {
+    throw 'Live overview did not reflect registered assets and incidents.'
+}
 $incidentPage = Send-Json 'GET' "/api/v0/orgs/$($settings.WAYLORN_TEST_ORG_ID)/incidents?status=open" $admin $null
 $incidentItems = ($incidentPage.Content | ConvertFrom-Json).items
 if ($incidentPage.StatusCode -ne 200 -or -not @($incidentItems | Where-Object { $_.id -eq $incidentId }).Count) {
@@ -167,4 +173,4 @@ if ($maintenance.StatusCode -ne 200 -or ($maintenance.Content | ConvertFrom-Json
     throw 'Maintenance frontend list failed.'
 }
 
-Write-Output 'Live Keycloak + PostgreSQL smoke passed: readiness, JWT, inventory, approval, audit, incident, maintenance and topology.'
+Write-Output 'Live Keycloak + PostgreSQL smoke passed: readiness, JWT, inventory, approval, audit, incident, maintenance, topology and overview.'

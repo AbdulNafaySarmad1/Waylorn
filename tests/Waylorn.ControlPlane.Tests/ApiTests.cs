@@ -224,6 +224,10 @@ public class ApiTests
         var repeated = await client.PostAsJsonAsync("/api/v1/commands",
             new { assetId = compute, operation = "ChangeConfiguration", changeTicket = "CHG-1", windowStartUtc = start, windowEndUtc = end });
         Assert.Equal(HttpStatusCode.OK, repeated.StatusCode);
+        var overview = await client.GetFromJsonAsync<JsonElement>($"/api/v0/orgs/{org}/overview");
+        Assert.Equal(0, overview.GetProperty("pendingApprovals").GetInt32());
+        Assert.Equal(3, overview.GetProperty("sites")[0].GetProperty("assetHealth").GetProperty("unknown").GetInt32());
+        Assert.Equal(1, overview.GetProperty("sites")[0].GetProperty("openIncidents").GetProperty("critical").GetInt32());
 
         SetIdentity(client, org, site, "Approver", "admin");
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/v0/orgs/{org}/assets?siteId={site}")).StatusCode);

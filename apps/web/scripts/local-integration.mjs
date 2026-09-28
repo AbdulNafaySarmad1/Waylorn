@@ -23,6 +23,8 @@ try {
   await page.getByText('Local Test Plant').first().waitFor();
   await page.locator('summary', { hasText: 'Local Test Plant' }).click();
   await page.getByText('Test Bench').first().waitFor();
+  await page.goto('http://localhost:3000/o/waylorn-local/overview');
+  await page.getByRole('table', { name: 'Site status' }).getByText('Local Test Plant').first().waitFor();
   await page.goto('http://localhost:3000/o/waylorn-local/assets');
   const observedAsset = page.locator('tr', { hasText: 'Modbus simulator observation' }).first();
   await observedAsset.locator('a').first().click();
@@ -45,7 +47,7 @@ try {
   await page.getByText('Direct relationships').first().waitFor();
   await page.getByRole('button', { name: 'Table', exact: true }).click();
   await page.getByText('Depends on').first().waitFor();
-  process.stdout.write('Browser integration passed: Keycloak login, inventory, site hierarchy, telemetry, incidents, maintenance and topology.\n');
+  process.stdout.write('Browser integration passed: Keycloak login, inventory, site hierarchy, overview, telemetry, incidents, maintenance and topology.\n');
 } finally {
   await browser.close();
 }

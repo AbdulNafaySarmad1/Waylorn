@@ -163,7 +163,7 @@ public static class FrontendEndpoints
     private static string RegionId(string name) =>
         "region:" + WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(name));
 
-    private static IQueryable<Site> VisibleSites(ClaimsPrincipal principal, WaylornDbContext db)
+    internal static IQueryable<Site> VisibleSites(ClaimsPrincipal principal, WaylornDbContext db)
     {
         var ids = principal.FindAll("site_id").Select(x => x.Value)
             .Where(x => Guid.TryParse(x, out _)).Select(Guid.Parse).ToArray();
