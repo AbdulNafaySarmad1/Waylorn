@@ -54,3 +54,11 @@ cargo test --manifest-path crates/ot-core/Cargo.toml --offline
 On Windows without the MSVC linker, run the Rust tests with `--target x86_64-pc-windows-gnu`.
 
 The SSH Git remote is `git@github.com:AbdulNafaySarmad1/Waylorn.git`.
+
+## Contributing
+
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md); it explains the setup, the checks to run, and the safety rules for work near operational technology. Contributors sign a short [CLA](CLA.md) and follow the [Code of Conduct](CODE_OF_CONDUCT.md). Please report security issues privately, as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+Waylorn is licensed under the [GNU Affero General Public License v3.0](LICENSE) (`AGPL-3.0-only`). If you run a modified version as a network service, the AGPL requires you to offer its source to the users of that service.
